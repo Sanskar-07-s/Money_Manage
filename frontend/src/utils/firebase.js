@@ -3,13 +3,13 @@ import { getAuth } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBkn7L2MopvsBiJeQ-xkdOIPrLKJmxFRg8",
-  authDomain: "money-manage-79f73.firebaseapp.com",
-  projectId: "money-manage-79f73",
-  storageBucket: "money-manage-79f73.firebasestorage.app",
-  messagingSenderId: "266735297854",
-  appId: "1:266735297854:web:591f20fa9ebfa24f1b386f",
-  measurementId: "G-1D0LDM0NDX"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 let app = null;
