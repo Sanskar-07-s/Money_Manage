@@ -63,6 +63,17 @@ npm install
 npm run dev
 ```
 
+## Security Guardrails
+
+This repository includes a secret scanner that blocks known key formats
+before commit and in CI.
+
+Enable the local pre-commit hook once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## 🛡️ Security & Privacy
 - **Environment Isolation**: All API keys and service accounts are excluded via `.gitignore`.
 - **JWT Protection**: All `/api/*` routes are secured using Firebase ID Tokens.
