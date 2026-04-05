@@ -1,4 +1,4 @@
-const { admin, isFirebaseAdminReady } = require('../config/firebase');
+const { admin, isFirebaseAdminReady, firebaseAdminError } = require('../config/firebase');
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -11,7 +11,11 @@ const verifyToken = async (req, res, next) => {
 
   try {
     if (!isFirebaseAdminReady) {
-      return res.status(503).json({ error: 'Authentication service unavailable' });
+      return res.status(503).json({
+        error: 'Authentication service unavailable',
+        hint: 'Configure FIREBASE_SERVICE_ACCOUNT_JSON (preferred on Vercel) or FIREBASE_SERVICE_ACCOUNT_PATH.',
+        detail: firebaseAdminError ? firebaseAdminError.message : 'Firebase Admin SDK not initialized',
+      });
     }
 
     const decodedToken = await admin.auth().verifyIdToken(token);

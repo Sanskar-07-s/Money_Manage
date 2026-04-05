@@ -49,6 +49,8 @@ npm install
 # PORT=5005
 # OPENAI_API_KEY=your_key
 # FIREBASE_SERVICE_ACCOUNT_PATH=path/to/your/firebase-adminsdk.json
+# Optional for Vercel/CI (preferred over file path there):
+# FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 npm run dev
 ```
 
@@ -56,12 +58,24 @@ npm run dev
 ```bash
 cd frontend
 npm install
-# Create a .env file with your Firebase config:
+# Copy .env.example to .env and fill values:
 # VITE_API_URL=http://localhost:5005
-# VITE_FIREBASE_API_KEY=...
-# ...
+# VITE_FIREBASE_API_KEY=your_firebase_api_key
+# VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+# VITE_FIREBASE_PROJECT_ID=your_project_id
+# VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+# VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+# VITE_FIREBASE_APP_ID=your_app_id
+# VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
 npm run dev
 ```
+
+### 3. Vercel Deployment Variables
+- Set the same `VITE_*` keys in **Vercel -> Project Settings -> Environment Variables**.
+- For multi-service deploys (`backend` mounted at `/_/backend`), set `VITE_API_URL=/_/backend`.
+- For backend auth on Vercel, set `FIREBASE_SERVICE_ACCOUNT_JSON` to your full Firebase Admin service account JSON (single-line JSON).
+- Add them for the environments you use (`Production`, `Preview`, and/or `Development`).
+- Redeploy after saving variables, because Vite injects them at build time.
 
 ## Security Guardrails
 
