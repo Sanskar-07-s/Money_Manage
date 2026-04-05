@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { auth } from '../utils/firebase';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5005';
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD ? '' : 'http://localhost:5005');
 
 const getHeaders = async () => {
     let token = 'dummy-token';
@@ -21,20 +23,20 @@ export const processAI = async (message, localBalances) => {
         message,
         localBalances
     };
-    const res = await axios.post(`${API_URL}/ai/process`, payload, config);
+    const res = await axios.post(`${API_URL}/api/ai/process`, payload, config);
     return res.data;
 };
 
 export const addTransaction = async (transaction) => {
     const config = await getHeaders();
-    const res = await axios.post(`${API_URL}/transaction/add`, transaction, config);
+    const res = await axios.post(`${API_URL}/api/transaction/add`, transaction, config);
     return res.data;
 };
 
 export const fetchTransactions = async () => {
     try {
         const config = await getHeaders();
-        const res = await axios.get(`${API_URL}/transaction/all`, config);
+        const res = await axios.get(`${API_URL}/api/transaction/all`, config);
         return res.data.transactions;
     } catch {
         return [];
@@ -44,7 +46,7 @@ export const fetchTransactions = async () => {
 export const fetchInsights = async () => {
     try {
         const config = await getHeaders();
-        const res = await axios.get(`${API_URL}/ai/insights`, config);
+        const res = await axios.get(`${API_URL}/api/ai/insights`, config);
         return res.data.insight;
     } catch {
         return 'Not available.';
@@ -54,7 +56,7 @@ export const fetchInsights = async () => {
 export const fetchSummary = async () => {
     try {
         const config = await getHeaders();
-        const res = await axios.get(`${API_URL}/transaction/summary`, config);
+        const res = await axios.get(`${API_URL}/api/transaction/summary`, config);
         return res.data.balances;
     } catch {
         return null;
@@ -64,7 +66,7 @@ export const fetchSummary = async () => {
 export const fetchCloudStatus = async () => {
     try {
         const config = await getHeaders();
-        const res = await axios.get(`${API_URL}/transaction/status`, config);
+        const res = await axios.get(`${API_URL}/api/transaction/status`, config);
         return res.data;
     } catch {
         return {
@@ -76,7 +78,7 @@ export const fetchCloudStatus = async () => {
 
 export const syncCloudData = async (balances, transactions) => {
     const config = await getHeaders();
-    const res = await axios.post(`${API_URL}/transaction/sync`, {
+    const res = await axios.post(`${API_URL}/api/transaction/sync`, {
         balances,
         transactions,
     }, config);
@@ -86,7 +88,7 @@ export const syncCloudData = async (balances, transactions) => {
 export const fetchChatHistory = async () => {
     try {
         const config = await getHeaders();
-        const res = await axios.get(`${API_URL}/ai/history`, config);
+        const res = await axios.get(`${API_URL}/api/ai/history`, config);
         return res.data.messages;
     } catch {
         return [];
@@ -95,14 +97,14 @@ export const fetchChatHistory = async () => {
 
 export const deleteChatHistory = async () => {
     const config = await getHeaders();
-    const res = await axios.delete(`${API_URL}/user/delete-chat`, config);
+    const res = await axios.delete(`${API_URL}/api/user/delete-chat`, config);
     return res.data;
 };
 
 export const fetchProfile = async () => {
     try {
         const config = await getHeaders();
-        const res = await axios.get(`${API_URL}/user/profile`, config);
+        const res = await axios.get(`${API_URL}/api/user/profile`, config);
         return res.data;
     } catch (error) {
         console.error('Fetch profile failed', error);
@@ -112,12 +114,12 @@ export const fetchProfile = async () => {
 
 export const updateProfile = async (profileData) => {
     const config = await getHeaders();
-    const res = await axios.put(`${API_URL}/user/profile/update`, profileData, config);
+    const res = await axios.put(`${API_URL}/api/user/profile/update`, profileData, config);
     return res.data;
 };
 
 export const deleteUserAllData = async () => {
     const config = await getHeaders();
-    const res = await axios.delete(`${API_URL}/user/delete-all`, config);
+    const res = await axios.delete(`${API_URL}/api/user/delete-all`, config);
     return res.data;
 };

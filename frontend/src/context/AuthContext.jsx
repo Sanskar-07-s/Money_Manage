@@ -1,6 +1,13 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { auth } from '../utils/firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut,
+  setPersistence,
+  browserSessionPersistence 
+} from 'firebase/auth';
 import { fetchProfile } from '../services/api';
 
 const AuthContext = createContext();
@@ -45,11 +52,12 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, [refreshProfile]);
 
-  const login = (email, password) => {
+  const login = async (email, password) => {
       if(!auth) {
           setUser({ uid: "demo-user", email });
           return Promise.resolve();
       }
+      await setPersistence(auth, browserSessionPersistence);
       return signInWithEmailAndPassword(auth, email, password);
   }
 

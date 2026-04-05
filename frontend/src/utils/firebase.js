@@ -16,11 +16,22 @@ let app = null;
 let auth = null;
 let analytics = null;
 
+const hasFirebaseClientConfig = Boolean(
+  firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.appId
+);
+
 try {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    if (typeof window !== "undefined") {
-      analytics = getAnalytics(app);
+    if (hasFirebaseClientConfig) {
+      app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      if (typeof window !== "undefined") {
+        analytics = getAnalytics(app);
+      }
+    } else {
+      console.warn("Firebase client config missing; running in local demo mode.");
     }
 } catch (e) {
     console.warn("Error initializing firebase client", e);

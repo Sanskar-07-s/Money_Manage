@@ -10,6 +10,12 @@ const openai = apiKey
     })
   : null;
 
+if (!apiKey) {
+  console.warn('[AI-Service] Warning: OPENAI_API_KEY is not defined. AI features will use heuristic fallbacks.');
+} else {
+  console.log(`[AI-Service] Initialized with ${isOpenRouter ? 'OpenRouter' : 'OpenAI'} configuration.`);
+}
+
 const categoryAliases = {
   food: 'Food',
   snacks: 'Food',

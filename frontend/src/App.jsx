@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Chat from './pages/Chat';
 import Transactions from './pages/Transactions';
 import Settings from './pages/Settings';
+import { useAutoSync } from './hooks/useAutoSync';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -31,6 +32,7 @@ const PageWrapper = ({ children }) => (
 
 function App() {
   const location = useLocation();
+  useAutoSync();
 
   return (
     <AnimatePresence mode="wait">

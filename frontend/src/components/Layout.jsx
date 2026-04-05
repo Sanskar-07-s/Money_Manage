@@ -50,7 +50,7 @@ const Layout = ({ children }) => {
   return (
     <div className="flex flex-col h-[100dvh] bg-slate-50 md:flex-row overflow-hidden w-full relative">
       {/* Sidebar for Desktop */}
-      <nav className="z-[100] flex flex-row justify-around items-center px-2 py-3 bg-white/80 backdrop-blur-2xl border-t border-slate-100 md:border-t-0 md:border-r md:flex-col md:h-full md:w-20 lg:w-72 md:justify-start md:p-6 gap-2">
+      <nav className="z-[100] hidden md:flex md:flex-col md:h-full md:border-r md:bg-white/80 md:backdrop-blur-2xl md:border-slate-100 md:w-20 lg:w-72 md:p-6 gap-2">
         
         <div className="hidden md:flex items-center gap-3 w-full mb-10 px-2 pt-2">
           <div className="w-10 h-10 bg-brand rounded-2xl flex items-center justify-center text-white shadow-lg shadow-brand/20 shrink-0">
@@ -63,22 +63,22 @@ const Layout = ({ children }) => {
            <CommandPalette />
         </div>
 
-        <div className="flex flex-row md:flex-col gap-1 w-full flex-1 justify-around md:justify-start">
+        <div className="flex flex-col gap-1 w-full flex-1">
           {navLinks.map((link) => (
             <NavItem 
               key={link.to}
               to={link.to}
               icon={link.icon}
-              label={link.label}
+              label={link.label === 'Assistant' ? 'AI Chat' : link.label}
               isActive={location.pathname === link.to}
             />
           ))}
         </div>
 
-        <div className="flex-grow hidden md:block"></div>
+        <div className="flex-grow"></div>
         
         {/* Profile Hook */}
-        <div className="hidden md:flex flex-col gap-2 w-full px-1 pb-4 border-b border-slate-50 mb-2">
+        <div className="flex flex-col gap-2 w-full px-1 pb-4 border-b border-slate-50 mb-2">
            <div 
              onClick={() => setProfileOpen(true)}
              className="flex items-center gap-3 p-2 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group border border-transparent hover:border-slate-100"
@@ -105,7 +105,7 @@ const Layout = ({ children }) => {
 
         <button 
           onClick={handleLogout} 
-          className="p-3 md:w-full flex items-center gap-4 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all group lg:mb-2 shrink-0"
+          className="p-3 w-full flex items-center gap-4 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all group lg:mb-2 shrink-0"
         >
             <LogOut size={24} className="group-hover:translate-x-1 transition-transform" /> 
             <span className="hidden lg:inline text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 group-hover:text-red-600">Secure Exit</span>
@@ -113,9 +113,35 @@ const Layout = ({ children }) => {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto relative p-0 m-0 w-full min-h-0 scroller-hidden">
+      <main className="flex-1 overflow-y-auto relative p-0 m-0 w-full min-h-0 scroller-hidden pb-16 md:pb-0">
         {children}
       </main>
+
+      {/* Bottom Nav for Mobile */}
+      <nav className="z-[100] md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-2xl border-t border-slate-100 flex items-center justify-around px-4">
+          {navLinks.map((link) => (
+            <Link 
+              key={link.to} 
+              to={link.to}
+              className={cn(
+                "flex flex-col items-center gap-1 transition-all",
+                location.pathname === link.to ? "text-brand scale-110" : "text-slate-400"
+              )}
+            >
+              <link.icon size={20} className={cn(location.pathname === link.to && "fill-brand/10")} />
+              <span className="text-[10px] font-bold tracking-tight">{link.label === 'Assistant' ? 'AI' : link.label}</span>
+            </Link>
+          ))}
+          <button 
+            onClick={() => setProfileOpen(true)}
+            className="flex flex-col items-center gap-1 text-slate-400"
+          >
+             <div className="w-5 h-5 rounded-full overflow-hidden bg-slate-200 border border-slate-300">
+                {profile?.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : null}
+             </div>
+             <span className="text-[10px] font-bold tracking-tight">Me</span>
+          </button>
+      </nav>
 
       {/* Global Profile Drawer */}
       <ProfileDrawer isOpen={profileOpen} onClose={() => setProfileOpen(false)} />
