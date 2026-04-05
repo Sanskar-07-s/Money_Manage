@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const { isFirebaseAdminReady, firebaseAdminError } = require('./config/firebase');
 
 const aiRoutes = require('./routes/ai');
 const transactionRoutes = require('./routes/transaction');
@@ -16,7 +17,12 @@ app.use('/api/transaction', transactionRoutes);
 app.use('/api/user', userRoutes);
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'active', timestamp: new Date() });
+  res.json({
+    status: 'active',
+    firebaseReady: isFirebaseAdminReady,
+    firebaseError: firebaseAdminError ? firebaseAdminError.message : null,
+    timestamp: new Date(),
+  });
 });
 
 app.get('/', (req, res) => {

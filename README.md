@@ -73,7 +73,9 @@ npm run dev
 ### 3. Vercel Deployment Variables
 - Set the same `VITE_*` keys in **Vercel -> Project Settings -> Environment Variables**.
 - For multi-service deploys (`backend` mounted at `/_/backend`), set `VITE_API_URL=/_/backend`.
-- For backend auth on Vercel, set `FIREBASE_SERVICE_ACCOUNT_JSON` to your full Firebase Admin service account JSON (single-line JSON).
+- For backend auth on Vercel, set either:
+  - `FIREBASE_SERVICE_ACCOUNT_JSON` to your full Firebase Admin service account JSON, or
+  - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`.
 - Add them for the environments you use (`Production`, `Preview`, and/or `Development`).
 - Redeploy after saving variables, because Vite injects them at build time.
 

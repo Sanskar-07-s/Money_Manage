@@ -15,6 +15,16 @@ try {
     if (serviceAccount.private_key) {
       serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
     }
+  } else if (
+    process.env.FIREBASE_PROJECT_ID &&
+    process.env.FIREBASE_CLIENT_EMAIL &&
+    process.env.FIREBASE_PRIVATE_KEY
+  ) {
+    serviceAccount = {
+      project_id: process.env.FIREBASE_PROJECT_ID,
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    };
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
     const configuredPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH.trim();
     const resolvedPath = path.isAbsolute(configuredPath)
@@ -39,7 +49,9 @@ try {
     isFirebaseAdminReady = true;
     console.log('Firebase Admin initialized successfully');
   } else {
-    console.warn('Firebase Admin not initialized. Provide FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH.');
+    console.warn(
+      'Firebase Admin not initialized. Provide FIREBASE_SERVICE_ACCOUNT_JSON, split vars (FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY), or FIREBASE_SERVICE_ACCOUNT_PATH.'
+    );
   }
 } catch (error) {
   firebaseAdminError = error;

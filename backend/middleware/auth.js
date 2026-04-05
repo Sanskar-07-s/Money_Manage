@@ -13,7 +13,7 @@ const verifyToken = async (req, res, next) => {
     if (!isFirebaseAdminReady) {
       return res.status(503).json({
         error: 'Authentication service unavailable',
-        hint: 'Configure FIREBASE_SERVICE_ACCOUNT_JSON (preferred on Vercel) or FIREBASE_SERVICE_ACCOUNT_PATH.',
+        hint: 'Configure FIREBASE_SERVICE_ACCOUNT_JSON, or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY, or FIREBASE_SERVICE_ACCOUNT_PATH.',
         detail: firebaseAdminError ? firebaseAdminError.message : 'Firebase Admin SDK not initialized',
       });
     }
