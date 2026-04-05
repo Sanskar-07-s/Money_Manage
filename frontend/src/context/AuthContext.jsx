@@ -30,10 +30,9 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     if (!auth) {
-        setUser({ uid: "demo-user", email: "demo@user.com" });
-        setProfile({ name: 'Demo User', email: 'demo@user.com', phone: '', avatar: '' });
-        setLoading(false);
-        return;
+      console.error('Firebase Auth is not initialized.');
+      setLoading(false);
+      return;
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (usr) => {
@@ -53,28 +52,18 @@ export const AuthProvider = ({ children }) => {
   }, [refreshProfile]);
 
   const login = async (email, password) => {
-      if(!auth) {
-          setUser({ uid: "demo-user", email });
-          return Promise.resolve();
-      }
+      if (!auth) throw new Error('Firebase Auth is not initialized.');
       await setPersistence(auth, browserSessionPersistence);
       return signInWithEmailAndPassword(auth, email, password);
   }
 
   const signup = (email, password) => {
-      if(!auth) {
-          setUser({ uid: "demo-user", email });
-          return Promise.resolve();
-      }
+      if (!auth) throw new Error('Firebase Auth is not initialized.');
       return createUserWithEmailAndPassword(auth, email, password);
   }
 
   const logout = () => {
-      if(!auth) {
-          setUser(null);
-          setProfile(null);
-          return Promise.resolve();
-      }
+      if (!auth) throw new Error('Firebase Auth is not initialized.');
       return signOut(auth);
   }
 

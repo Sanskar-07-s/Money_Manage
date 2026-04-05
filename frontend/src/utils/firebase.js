@@ -12,29 +12,34 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-let app = null;
-let auth = null;
+const requiredConfig = [
+  ["VITE_FIREBASE_API_KEY", firebaseConfig.apiKey],
+  ["VITE_FIREBASE_AUTH_DOMAIN", firebaseConfig.authDomain],
+  ["VITE_FIREBASE_PROJECT_ID", firebaseConfig.projectId],
+  ["VITE_FIREBASE_APP_ID", firebaseConfig.appId],
+];
+
+const missingConfigKeys = requiredConfig
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+if (missingConfigKeys.length > 0) {
+  throw new Error(
+    `Missing Firebase client configuration: ${missingConfigKeys.join(", ")}. ` +
+      "Set these variables in your frontend environment before running the app."
+  );
+}
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 let analytics = null;
 
-const hasFirebaseClientConfig = Boolean(
-  firebaseConfig.apiKey &&
-    firebaseConfig.authDomain &&
-    firebaseConfig.projectId &&
-    firebaseConfig.appId
-);
-
-try {
-    if (hasFirebaseClientConfig) {
-      app = initializeApp(firebaseConfig);
-      auth = getAuth(app);
-      if (typeof window !== "undefined") {
-        analytics = getAnalytics(app);
-      }
-    } else {
-      console.warn("Firebase client config missing; running in local demo mode.");
-    }
-} catch (e) {
-    console.warn("Error initializing firebase client", e);
+if (typeof window !== "undefined") {
+  try {
+    analytics = getAnalytics(app);
+  } catch (error) {
+    console.warn("Firebase Analytics initialization failed", error);
+  }
 }
 
 export { auth, app, analytics };

@@ -8,17 +8,10 @@ const verifyToken = async (req, res, next) => {
   }
 
   const token = authHeader.split('Bearer ')[1];
-  const isDevMode = process.env.NODE_ENV !== 'production';
-
-  if (isDevMode && token === 'dummy-token') {
-    req.user = { uid: 'demo-user-123' };
-    return next();
-  }
 
   try {
     if (!isFirebaseAdminReady) {
-      req.user = { uid: 'demo-user-123' };
-      return next();
+      return res.status(503).json({ error: 'Authentication service unavailable' });
     }
 
     const decodedToken = await admin.auth().verifyIdToken(token);

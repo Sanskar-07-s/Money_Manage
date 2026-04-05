@@ -6,10 +6,10 @@ const API_URL =
   (import.meta.env.PROD ? '' : 'http://localhost:5005');
 
 const getHeaders = async () => {
-    let token = 'dummy-token';
-    if (auth?.currentUser) {
-        token = await auth.currentUser.getIdToken();
+    if (!auth?.currentUser) {
+        throw new Error('User is not authenticated.');
     }
+    const token = await auth.currentUser.getIdToken();
     return {
         headers: {
             Authorization: `Bearer ${token}`
