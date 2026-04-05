@@ -43,10 +43,10 @@ function App() {
         <Route path="/" element={<PrivateRoute><Navigate to="/dashboard" replace /></PrivateRoute>} />
         <Route path="/history" element={<PrivateRoute><PageWrapper><Transactions /></PageWrapper></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute><PageWrapper><Settings /></PageWrapper></PrivateRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AnimatePresence>
   );
 }
 
 export default App;
-
