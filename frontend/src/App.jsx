@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AnimatePresence, motion } from "framer-motion";
@@ -35,7 +35,49 @@ const PageWrapper = ({ children }) => (
 
 function App() {
   const location = useLocation();
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   useAutoSync();
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  if (isOffline) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-xs space-y-6"
+        >
+          <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto shadow-xl">
+             <span className="text-4xl">🛜</span>
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">No Connection</h1>
+            <p className="text-slate-500 mt-2 text-sm leading-relaxed">
+              Synchronicity interrupted. Please check your internet connection to continue monitoring your finances.
+            </p>
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="w-full py-4 bg-brand text-white rounded-2xl font-bold shadow-lg shadow-brand/20 active:scale-95 transition-transform"
+          >
+            Retry Connection
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <Suspense

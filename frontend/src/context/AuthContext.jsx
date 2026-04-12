@@ -6,7 +6,7 @@ import {
   createUserWithEmailAndPassword, 
   signOut,
   setPersistence,
-  browserSessionPersistence 
+  browserLocalPersistence 
 } from 'firebase/auth';
 import { fetchProfile } from '../services/api';
 
@@ -54,7 +54,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
       if (!auth) throw new Error(authUnavailableMessage);
-      await setPersistence(auth, browserSessionPersistence);
+      await setPersistence(auth, browserLocalPersistence);
       return signInWithEmailAndPassword(auth, email, password);
   }
 
