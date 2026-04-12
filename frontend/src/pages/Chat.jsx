@@ -12,14 +12,18 @@ import {
   MessageSquare, 
   History as HistoryIcon,
   AlertCircle,
-  Trash2
+  Trash2,
+  ShieldCheck
 } from 'lucide-react';
-import { processAI, fetchChatHistory, deleteChatHistory } from '../services/api';
+import { processAI, fetchChatHistory, deleteChatHistory, addTransaction } from '../services/api';
 import { 
   getLocalBalances, 
   addLocalTransaction, 
-  getStorageMode 
+  getStorageMode,
+  getLocalCategories,
+  saveLocalCategory
 } from '../utils/storage';
+import { addCategory, fetchCategories } from '../services/api';
 import { emitFinanceUpdate } from '../utils/financeEvents';
 import ActionButton from '../components/ActionButton';
 import GlassBox from '../components/GlassBox';
@@ -27,6 +31,8 @@ import { ChatScene } from '../components/3d/ChatScene';
 import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
 import { cn } from '../utils/cn';
 import ReactMarkdown from 'react-markdown';
+import ManualAddModal from '../components/ManualAddModal';
+import { Plus } from 'lucide-react';
 
 export default function Chat() {
   const [messages, setMessages] = useState([
@@ -40,6 +46,8 @@ export default function Chat() {
   const [error, setError] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [pendingConflict, setPendingConflict] = useState(null);
   const messagesEndRef = useRef(null);
 
   const handleClearChat = async () => {
@@ -82,6 +90,89 @@ export default function Chat() {
     }
   };
 
+  const resolveConflict = async (resolution, newCategoryName = null) => {
+    if (!pendingConflict) return;
+    const { action, messageId } = pendingConflict;
+    
+    try {
+      let finalCategory = action.data.category;
+
+      if (resolution === 'CREATE') {
+        const catData = { 
+            name: action.data.category, 
+            type: action.data.type || 'expense' 
+        };
+        await addCategory(catData);
+        saveLocalCategory(catData);
+      } else if (resolution === 'SELECT') {
+        finalCategory = newCategoryName;
+      }
+
+      const updatedAction = {
+        ...action,
+        data: { ...action.data, category: finalCategory }
+      };
+
+      setPendingConflict(null);
+      await executeAction(updatedAction, messageId, true); // true = bypass second check
+    } catch (err) {
+      setError("Conflict resolution failed.");
+    }
+  };
+
+  const executeAction = async (action, messageId, skipValidation = false) => {
+    // 1. Prevent double execution if already in progress or done
+    const targetMsg = messages.find(m => m.id === messageId);
+    if (targetMsg?.executed && !skipValidation) return;
+
+    // 2. Category Validation Layer
+    if (!skipValidation) {
+      const existingCategories = getLocalCategories();
+      const exists = existingCategories.some(c => c.name.toLowerCase() === action.data.category.toLowerCase());
+      
+      if (!exists) {
+        setPendingConflict({ action, messageId });
+        return;
+      }
+    }
+
+    try {
+      const mode = getStorageMode();
+      if (action.type === 'ADD_TRANSACTION') {
+        const txData = { 
+            ...action.data, 
+            amount: Number(action.data.amount),
+            source: 'ai', 
+            createdAt: new Date().toISOString() 
+        };
+        
+        if (mode === 'local' || mode === 'hybrid') {
+          addLocalTransaction(txData);
+        }
+        await addTransaction(txData);
+        
+        const balances = getLocalBalances();
+        const symbol = action.data.type?.toLowerCase() === 'income' ? '+' : '-';
+
+        setMessages(prev => [
+          ...prev.map(m => m.id === messageId ? { ...m, actions: [], executed: true } : m),
+          {
+            id: Date.now() + 5,
+            sender: 'ai',
+            text: `### ✅ Transaction Synchronized\n**Current Balance:** ₹${balances.total.toLocaleString()}\n**Impact:** ${symbol}₹${Number(action.data.amount).toLocaleString()}\n\nLedger entry: *${action.data.note}* in **${action.data.category}** using **${action.data.account}**`,
+            executed: true
+          }
+        ]);
+
+        setVoiceBanner('Sync successful ✅');
+        if (!skipValidation) setTimeout(() => setVoiceBanner(''), 3000);
+      }
+    } catch (err) {
+      console.error("Action execution failed", err);
+      setError("Execution failed. Retrying sync node...");
+    }
+  };
+
   const submitMessage = useCallback(async (text) => {
     const messageText = text.trim();
     if (!messageText) return;
@@ -90,36 +181,35 @@ export default function Chat() {
     const userMsg = { id: Date.now(), text: messageText, sender: 'user' };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
-    setVoicePreview('');
-    setVoiceBanner('');
     setIsTyping(true);
 
     try {
-      const mode = getStorageMode();
       const localBalances = getLocalBalances();
-      
       const response = await processAI(messageText, localBalances);
-      
-      if (mode === 'local' || mode === 'hybrid') {
-          if (response.parsedTransaction) {
-              addLocalTransaction({...response.parsedTransaction, createdAt: new Date().toISOString()});
-          }
+
+      const aiMsgId = Date.now() + 1;
+      const aiMsg = {
+        id: aiMsgId,
+        text: response.message || "Proposal prepared.",
+        sender: 'ai',
+        actions: response.actions || [],
+        confidence: response.confidence || 0,
+        requiresApproval: response.requiresApproval
+      };
+
+      setMessages(prev => [...prev, aiMsg]);
+
+      // Execution Layer: Autonomous Mode (Confidence > 98% and matching conditions)
+      if (!response.requiresApproval && response.actions.length > 0 && response.confidence > 98) {
+         const existing = getLocalCategories();
+         const firstAction = response.actions[0];
+         const catExists = existing.some(c => c.name.toLowerCase() === firstAction.data.category.toLowerCase());
+         
+         if (catExists) {
+           response.actions.forEach(action => executeAction(action, aiMsgId));
+         }
       }
 
-      emitFinanceUpdate({
-        source: 'chat',
-        message: messageText,
-        updatedBalances: response.updatedBalances,
-        parsedTransaction: response.parsedTransaction || null,
-        parsedIntent: response.parsedIntent || null,
-        aiMessage: response.aiMessage || '',
-      });
-
-      setMessages(prev => [...prev, {
-          id: Date.now() + 1,
-          text: response.aiMessage || "Transaction logged successfully.",
-          sender: 'ai'
-      }]);
     } catch (err) {
       setError("Synchronicity lost. Check your connection.");
       setMessages(prev => [...prev, {
@@ -209,6 +299,14 @@ export default function Chat() {
             >
                 <HistoryIcon size={18} />
             </button>
+            <button
+               onClick={() => setIsManualModalOpen(true)}
+               title="Manual Entry"
+               className="p-2 rounded-xl text-brand bg-brand/5 hover:bg-brand hover:text-white transition-all duration-300 shadow-sm flex items-center gap-1.5"
+            >
+               <Plus size={18} />
+               <span className="hidden lg:inline text-[9px] font-black uppercase tracking-widest">Manual</span>
+            </button>
             <div className="h-6 w-px bg-slate-200 mx-1"></div>
             <button
               type="button"
@@ -292,6 +390,65 @@ export default function Chat() {
                                       {msg.text}
                                     </ReactMarkdown>
                                   </div>
+
+                                  {/* AI Action Proposal Layer */}
+                                  {msg.sender === 'ai' && msg.actions && msg.actions.length > 0 && !msg.executed && (
+                                     <motion.div 
+                                       initial={{ opacity: 0, scale: 0.9 }}
+                                       animate={{ opacity: 1, scale: 1 }}
+                                       className="mt-4 p-4 rounded-2xl bg-brand/5 border border-brand/20 space-y-4"
+                                     >
+                                        <div className="flex items-center justify-between">
+                                           <div className="flex items-center gap-2">
+                                              <Sparkles size={14} className="text-brand" />
+                                              <span className="text-[10px] font-black uppercase tracking-widest text-brand">Proposed Action</span>
+                                           </div>
+                                           <span className="text-[9px] font-bold text-slate-400">Confidence: {Math.round(msg.confidence)}%</span>
+                                        </div>
+
+                                        {msg.actions.map((action, aiIdx) => (
+                                           <div key={aiIdx} className="bg-white p-3 rounded-xl border border-brand/10 shadow-sm">
+                                              {action.type === 'ADD_TRANSACTION' && (
+                                                 <div className="flex justify-between items-center">
+                                                    <div>
+                                                       <p className="text-xs font-bold text-slate-800">₹{action.data.amount} {action.data.category}</p>
+                                                       <p className="text-[9px] font-medium text-slate-500 uppercase">{action.data.type} • via {action.data.account}</p>
+                                                    </div>
+                                                    <div className="text-[9px] font-black text-brand bg-brand/5 px-2 py-1 rounded-lg">PROPOSED</div>
+                                                 </div>
+                                              )}
+                                           </div>
+                                        ))}
+
+                                        <div className="flex gap-2">
+                                           <button 
+                                              onClick={() => {
+                                                if (msg.executed) return;
+                                                // 1. Immediately update UI to local "Executed" state to prevent double-click
+                                                setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, executed: true } : m));
+                                                // 2. Process actions
+                                                msg.actions.forEach(act => executeAction(act, msg.id));
+                                              }}
+                                              className="flex-1 py-2 bg-brand text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all shadow-md shadow-brand/10 disabled:opacity-50"
+                                              disabled={msg.executed}
+                                           >
+                                              {msg.executed ? 'Executed' : 'Approve & Execute'}
+                                           </button>
+                                           <button 
+                                              onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actions: [], rejected: true } : m))}
+                                              className="px-4 py-2 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 transition-colors"
+                                           >
+                                              Reject
+                                           </button>
+                                        </div>
+                                     </motion.div>
+                                  )}
+
+                                  {msg.executed && (
+                                     <div className="mt-3 flex items-center gap-2 text-emerald-500 text-[9px] font-black uppercase tracking-widest px-1">
+                                        <ShieldCheck size={12} /> Transaction Absolute Verified
+                                     </div>
+                                  )}
                                </div>
                                <p className={cn(
                                  "text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mt-2 opacity-60 px-1",
@@ -422,6 +579,65 @@ export default function Chat() {
           )}
         </AnimatePresence>
 
+        <ManualAddModal 
+          isOpen={isManualModalOpen} 
+          onClose={() => setIsManualModalOpen(false)} 
+          onSuccess={() => {
+            setVoiceBanner('Transaction recorded manually ✅');
+            setTimeout(() => setVoiceBanner(''), 3000);
+            loadHistory();
+          }}
+        />
+
+        <AnimatePresence>
+          {pendingConflict && (
+            <motion.div 
+               initial={{opacity: 0}}
+               animate={{opacity: 1}}
+               exit={{opacity: 0}}
+               className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-4 pointer-events-auto"
+            >
+               <GlassBox className="p-8 max-w-sm w-full bg-white shadow-2xl space-y-6">
+                  <div className="flex items-center gap-4 text-amber-500">
+                     <AlertCircle size={32} />
+                     <h3 className="text-xl font-black tracking-tight text-slate-800">Category Mismatch</h3>
+                  </div>
+                  <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                     The category <span className="text-brand font-black">"{pendingConflict.action.data.category}"</span> does not exist in your records. How would you like to proceed?
+                  </p>
+                  
+                  <div className="space-y-3">
+                     <button 
+                       onClick={() => resolveConflict('CREATE')}
+                       className="w-full py-4 rounded-2xl bg-brand text-white font-black uppercase tracking-widest text-[11px] shadow-lg shadow-brand/20 hover:scale-[1.02] transition-all"
+                     >
+                        Create & Continue
+                     </button>
+                     
+                     <div className="relative">
+                        <select 
+                          onChange={(e) => resolveConflict('SELECT', e.target.value)}
+                          className="w-full py-4 px-4 rounded-2xl bg-slate-50 border border-slate-100 text-slate-700 font-bold text-xs appearance-none focus:outline-none focus:ring-2 focus:ring-brand/20"
+                          defaultValue=""
+                        >
+                           <option value="" disabled>Select Existing Category</option>
+                           {getLocalCategories().map(cat => (
+                             <option key={cat.id} value={cat.name}>{cat.name}</option>
+                           ))}
+                        </select>
+                     </div>
+
+                     <button 
+                       onClick={() => setPendingConflict(null)}
+                       className="w-full py-3 rounded-2xl text-slate-400 font-bold text-[10px] uppercase tracking-widest hover:text-slate-600 transition-colors"
+                     >
+                        Cancel Transaction
+                     </button>
+                  </div>
+               </GlassBox>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </Layout>
   );

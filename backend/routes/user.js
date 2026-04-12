@@ -126,4 +126,140 @@ router.delete('/delete-chat', verifyToken, async (req, res) => {
   }
 });
 
+// --- CATEGORY MANAGEMENT ---
+
+// GET user categories
+router.get('/categories', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const userDoc = await db.collection('users').doc(uid).get();
+
+    if (!userDoc.exists || !userDoc.data().categories) {
+       // Return default categories if none exist
+       const defaultCategories = [
+         { id: '1', name: 'Food', type: 'expense' },
+         { id: '2', name: 'Travel', type: 'expense' },
+         { id: '3', name: 'College', type: 'expense' },
+         { id: '4', name: 'Freelancing', type: 'income' },
+         { id: '5', name: 'Investment', type: 'expense' },
+         { id: '6', name: 'Personal', type: 'expense' }
+       ];
+       return res.json(defaultCategories);
+    }
+
+    res.json(userDoc.data().categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ADD category
+router.post('/categories/add', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { name, type } = req.body;
+
+    if (!name || !type) {
+      return res.status(400).json({ error: 'Name and type are required' });
+    }
+
+    const userRef = db.collection('users').doc(uid);
+    const userDoc = await userRef.get();
+    let categories = userDoc.exists && userDoc.data().categories ? userDoc.data().categories : [];
+
+    // Check for duplicates
+    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+      return res.status(400).json({ error: 'Category already exists' });
+    }
+
+    const newCategory = {
+      id: Date.now().toString(),
+      name,
+      type
+    };
+
+    categories.push(newCategory);
+    await userRef.update({ categories });
+
+    res.json(newCategory);
+  } catch (error) {
+    console.error('Error adding category:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// UPDATE category
+router.put('/categories/update', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { id, name, type } = req.body;
+
+    if (!id || !name || !type) {
+      return res.status(400).json({ error: 'ID, name, and type are required' });
+    }
+
+    const userRef = db.collection('users').doc(uid);
+    const userDoc = await userRef.get();
+    let categories = userDoc.exists && userDoc.data().categories ? userDoc.data().categories : [];
+
+    const index = categories.findIndex(c => c.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    // Check for duplicates (excluding current)
+    if (categories.some(c => c.id !== id && c.name.toLowerCase() === name.toLowerCase())) {
+      return res.status(400).json({ error: 'Category name already exists' });
+    }
+
+    categories[index] = { ...categories[index], name, type };
+    await userRef.update({ categories });
+
+    res.json(categories[index]);
+  } catch (error) {
+    console.error('Error updating category:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE category
+router.delete('/categories/delete/:id', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { id } = req.params;
+
+    const userRef = db.collection('users').doc(uid);
+    const userDoc = await userRef.get();
+    let categories = userDoc.exists && userDoc.data().categories ? userDoc.data().categories : [];
+
+    const categoryToDelete = categories.find(c => c.id === id);
+    if (!categoryToDelete) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    // Check if category is used in transactions
+    const txSnapshot = await userRef.collection('transactions')
+      .where('category', '==', categoryToDelete.name)
+      .limit(1)
+      .get();
+
+    if (!txSnapshot.empty) {
+      return res.status(400).json({ 
+        error: 'Category is in use', 
+        inUse: true,
+        message: 'This category is used in existing transactions. Deleting it may cause inconsistency.' 
+      });
+    }
+
+    const updatedCategories = categories.filter(c => c.id !== id);
+    await userRef.update({ categories: updatedCategories });
+
+    res.json({ success: true, message: 'Category deleted' });
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

@@ -7,30 +7,32 @@ import {
   getLocalBalances, 
   getLocalTransactions, 
   replaceLocalBalances,
-  replaceLocalTransactions
+  replaceLocalTransactions,
+  getPrivacyMode,
+  setPrivacyMode,
+  getSecurityLock,
+  setSecurityLock
 } from '../utils/storage';
-import { 
-  Database, 
-  RefreshCw, 
-  ShieldCheck, 
-  Settings as SettingsIcon, 
-  Share2, 
-  Lock, 
-  Layers, 
-  Trash2,
-  AlertTriangle,
-  Download
-} from 'lucide-react';
 import { 
   fetchCloudStatus, 
   fetchSummary, 
   syncCloudData, 
-  deleteUserAllData 
+  deleteUserAllData
 } from '../services/api';
+import { 
+  Settings as SettingsIcon, 
+  Database, 
+  ShieldCheck, 
+  Layers, 
+  Download, 
+  Lock, 
+  AlertTriangle,
+  RefreshCw,
+  Trash2
+} from 'lucide-react';
 import GlassBox from '../components/GlassBox';
 import ActionButton from '../components/ActionButton';
 import { cn } from '../utils/cn';
-// API helper removal
 
 export default function Settings() {
   const [cloudStatus, setCloudStatus] = useState({ cloudAvailable: false, transactionCount: 0 });
@@ -40,8 +42,13 @@ export default function Settings() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [isPrivacyMode, setIsPrivacyMode] = useState(getPrivacyMode());
+  const [isSecurityLock, setIsSecurityLock] = useState(getSecurityLock());
+
   useEffect(() => {
     loadCloudStatus();
+    setIsPrivacyMode(getPrivacyMode());
+    setIsSecurityLock(getSecurityLock());
   }, []);
 
   const loadCloudStatus = async () => {
@@ -227,8 +234,8 @@ export default function Settings() {
                   className="space-y-6"
                 >
                   <GlassBox className="p-10 bg-slate-900 border-none relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-10 opacity-10 -rotate-12 translate-x-1/2 -translate-y-1/2">
-                       <Database size={200} className="text-white" />
+                    <div className="absolute top-0 right-0 p-10 opacity-10 -rotate-12 translate-x-1/2 -translate-y-1/2 text-white">
+                       <Database size={200} />
                     </div>
                     
                     <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
@@ -318,6 +325,121 @@ export default function Settings() {
                         </div>
                      )}
                   </div>
+                </motion.div>
+              )}
+              {activeTab === 'security' && (
+                <motion.div 
+                  key="security"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="space-y-8"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <GlassBox className="p-8 border-none bg-slate-900 text-white relative overflow-hidden group shadow-2xl">
+                      <div className="absolute top-0 right-0 p-6 opacity-10 -rotate-12 translate-x-4 -translate-y-4">
+                        <ShieldCheck size={80} />
+                      </div>
+                      <h3 className="text-xl font-display font-bold tracking-tight mb-2">Neural Access Control</h3>
+                      <p className="text-xs font-medium text-slate-400 mb-6 leading-relaxed">Multi-factor authentication and biometric validation layers.</p>
+                      
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Biometric Lock</span>
+                          <div 
+                            onClick={() => {
+                               const next = !isSecurityLock;
+                               setSecurityLock(next);
+                               setIsSecurityLock(next);
+                            }}
+                            className={cn(
+                               "w-10 h-5 rounded-full relative cursor-pointer border transition-all duration-300",
+                               isSecurityLock ? "bg-brand/50 border-brand/20" : "bg-slate-700 border-white/10"
+                            )}
+                          >
+                            <motion.div 
+                               animate={{ x: isSecurityLock ? 20 : 0 }}
+                               className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">2FA Node Verification</span>
+                          <div className="w-10 h-5 bg-slate-700 rounded-full relative cursor-pointer">
+                            <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-slate-400 rounded-full shadow-sm"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </GlassBox>
+
+                    <GlassBox className="p-8 border-slate-100 bg-white shadow-premium flex flex-col justify-between">
+                      <div>
+                        <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-500 mb-6 shadow-sm">
+                           <Lock size={20} />
+                        </div>
+                        <h3 className="text-xl font-display font-bold text-slate-800 tracking-tight mb-2">Privacy Protocols</h3>
+                        <p className="text-xs font-medium text-slate-400 mb-6 leading-relaxed">Mask sensitive financial data across the entire interface.</p>
+                      </div>
+                      
+                      <div className="flex items-center justify-between py-3 px-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                           <div className={cn("w-2 h-2 rounded-full transition-all", isPrivacyMode ? "bg-brand animate-pulse" : "bg-slate-300")}></div>
+                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Invisible Mode</span>
+                        </div>
+                        <button 
+                          onClick={() => {
+                             const next = !isPrivacyMode;
+                             setPrivacyMode(next);
+                             setIsPrivacyMode(next);
+                          }}
+                          className={cn(
+                             "text-[9px] font-black uppercase tracking-widest hover:underline px-2 transition-colors",
+                             isPrivacyMode ? "text-brand" : "text-slate-400"
+                          )}
+                        >
+                           {isPrivacyMode ? 'Disable' : 'Enable'}
+                        </button>
+                      </div>
+                    </GlassBox>
+                  </div>
+
+                  <GlassBox className="p-8 md:p-10 border-white shadow-premium">
+                     <div className="flex items-center justify-between mb-8">
+                        <div>
+                           <h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">Session Matrix</h2>
+                           <p className="text-sm font-medium text-slate-400 mt-1">Live authorized access nodes and device synchronization.</p>
+                        </div>
+                        <div className="px-4 py-1.5 bg-brand/5 border border-brand/10 rounded-full">
+                           <span className="text-[9px] font-black uppercase tracking-widest text-brand">2 Active Nodes</span>
+                        </div>
+                     </div>
+
+                     <div className="space-y-4">
+                        {[
+                          { node: "Primary Browser Node", status: "Current", ip: "192.168.1.1", icon: Layers, color: "text-brand bg-brand/5" },
+                          { node: "Mobile Sync Client", status: "Active", ip: "172.16.0.42", icon: ShieldCheck, color: "text-indigo-500 bg-indigo-50" }
+                        ].map((sess, i) => (
+                           <div key={i} className="flex items-center justify-between p-5 bg-slate-50/50 rounded-3xl border border-slate-100 hover:bg-white hover:border-brand/20 transition-all group">
+                              <div className="flex items-center gap-4">
+                                 <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110", sess.color)}>
+                                    <sess.icon size={20} />
+                                 </div>
+                                 <div>
+                                    <h4 className="font-bold text-slate-800 text-sm tracking-tight">{sess.node}</h4>
+                                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">{sess.ip} • Verified Instance</p>
+                                 </div>
+                              </div>
+                              <div className="text-right">
+                                 <span className={cn(
+                                   "text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full border",
+                                   sess.status === 'Current' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-slate-100 text-slate-400 border-slate-200"
+                                 )}>
+                                    {sess.status}
+                                 </span>
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  </GlassBox>
                 </motion.div>
               )}
             </AnimatePresence>

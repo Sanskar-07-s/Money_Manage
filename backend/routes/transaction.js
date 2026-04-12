@@ -6,6 +6,7 @@ const {
   cloneDefaultBalances,
   normalizeBalances,
   applyTransactionToBalances,
+  recalculateBalances,
 } = require('../services/transactionService');
 
 router.post('/add', verifyToken, async (req, res) => {
@@ -197,6 +198,78 @@ router.post('/sync', verifyToken, async (req, res) => {
     }
   } catch (error) {
     console.error('Sync Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/update/:id', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { id } = req.params;
+    const updateData = req.body;
+
+    if (!db) {
+       return res.json({ success: true, message: 'Local update only simulated' });
+    }
+
+    const userRef = db.collection('users').doc(uid);
+    const txRef = userRef.collection('transactions').doc(id);
+    const txDoc = await txRef.get();
+
+    if (!txDoc.exists) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    // Update the transaction
+    await txRef.update({
+      ...updateData,
+      updatedAt: new Date()
+    });
+
+    // Recalculate ALL balances from ALL transactions (Truth Source)
+    const snapshot = await userRef.collection('transactions').get();
+    const allTxs = [];
+    snapshot.forEach(doc => allTxs.push({ id: doc.id, ...doc.data() }));
+    
+    const userDoc = await userRef.get();
+    const customCategories = userDoc.exists && userDoc.data().categories ? userDoc.data().categories : [];
+    
+    const newBalances = recalculateBalances(allTxs, customCategories);
+    await userRef.update({ balances: newBalances });
+
+    res.json({ success: true, updatedBalances: newBalances });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/delete/:id', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { id } = req.params;
+
+    if (!db) {
+       return res.json({ success: true, message: 'Local delete only simulated' });
+    }
+
+    const userRef = db.collection('users').doc(uid);
+    const txRef = userRef.collection('transactions').doc(id);
+
+    await txRef.delete();
+
+    // Recalculate ALL balances (Truth Source)
+    const snapshot = await userRef.collection('transactions').get();
+    const allTxs = [];
+    snapshot.forEach(doc => allTxs.push({ id: doc.id, ...doc.data() }));
+
+    const userDoc = await userRef.get();
+    const customCategories = userDoc.exists && userDoc.data().categories ? userDoc.data().categories : [];
+
+    const newBalances = recalculateBalances(allTxs, customCategories);
+    await userRef.update({ balances: newBalances });
+
+    res.json({ success: true, updatedBalances: newBalances });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

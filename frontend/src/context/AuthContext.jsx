@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { auth } from '../utils/firebase';
+import { auth, firebaseConfigError } from '../utils/firebase';
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
@@ -18,6 +18,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const authUnavailableMessage = firebaseConfigError?.message || 'Firebase Auth is not initialized.';
 
   const refreshProfile = useCallback(async () => {
     try {
@@ -30,7 +31,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     if (!auth) {
-      console.error('Firebase Auth is not initialized.');
+      console.error(authUnavailableMessage);
       setLoading(false);
       return;
     }
@@ -52,23 +53,23 @@ export const AuthProvider = ({ children }) => {
   }, [refreshProfile]);
 
   const login = async (email, password) => {
-      if (!auth) throw new Error('Firebase Auth is not initialized.');
+      if (!auth) throw new Error(authUnavailableMessage);
       await setPersistence(auth, browserSessionPersistence);
       return signInWithEmailAndPassword(auth, email, password);
   }
 
   const signup = (email, password) => {
-      if (!auth) throw new Error('Firebase Auth is not initialized.');
+      if (!auth) throw new Error(authUnavailableMessage);
       return createUserWithEmailAndPassword(auth, email, password);
   }
 
   const logout = () => {
-      if (!auth) throw new Error('Firebase Auth is not initialized.');
+      if (!auth) throw new Error(authUnavailableMessage);
       return signOut(auth);
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, setProfile, login, signup, logout, loading, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, setProfile, login, signup, logout, loading, refreshProfile, authReady: Boolean(auth), authError: firebaseConfigError?.message || null }}>
       {!loading && children}
     </AuthContext.Provider>
   );

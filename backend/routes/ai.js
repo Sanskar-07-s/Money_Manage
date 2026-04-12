@@ -1,12 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
-const { parseTransactionInput, generateResponse, generateInsights, generateContextReply } = require('../services/aiService');
+const { 
+  parseTransactionInput, 
+  generateResponse, 
+  generateInsights, 
+  generateContextReply, 
+  suggestCategory, 
+  generatePersonalityReport, 
+  suggestBudgets 
+} = require('../services/aiService');
 const { db } = require('../config/firebase');
 const {
   cloneDefaultBalances,
   normalizeBalances,
-  applyTransactionToBalances,
 } = require('../services/transactionService');
 
 router.get('/history', verifyToken, async (req, res) => {
@@ -34,131 +41,132 @@ router.post('/process', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    // Save User Message
+    const userRef = db.collection('users').doc(uid);
+    const userDoc = await userRef.get();
+    let customCategories = [];
+    if (userDoc.exists && userDoc.data().categories) {
+       customCategories = userDoc.data().categories;
+    }
+
+    // 1. Log User Message
     if (db) {
-      await db.collection('users').doc(uid).collection('chats').add({
+      await userRef.collection('chats').add({
         text: message,
         sender: 'user',
         createdAt: new Date()
       });
     }
 
-    const parsed = await parseTransactionInput(message);
+    // 2. Parse into Planning Format
+    const plan = await parseTransactionInput(message, customCategories);
+    
     let updatedBalances = normalizeBalances(localBalances || cloneDefaultBalances());
     let transactions = [];
 
-    if (db) {
-      const userRef = db.collection('users').doc(uid);
-      const doc = await userRef.get();
-
-      if (doc.exists) {
-        updatedBalances = normalizeBalances(doc.data().balances);
-      }
-
+    if (db && userDoc.exists) {
+      updatedBalances = normalizeBalances(userDoc.data().balances || cloneDefaultBalances());
       const snapshot = await userRef.collection('transactions').orderBy('createdAt', 'desc').limit(10).get();
       snapshot.forEach((txDoc) => transactions.push({ id: txDoc.id, ...txDoc.data() }));
     }
 
-    let aiMessage = '';
-    let responseObj = {};
-
-    if (parsed.intent !== 'transaction') {
-      aiMessage = await generateContextReply({
-        message,
-        intent: parsed.intent,
-        focus: parsed.focus,
-        balances: updatedBalances,
-        transactions,
-        cloudEnabled: Boolean(db),
-      });
-
-      responseObj = {
-        aiMessage,
-        updatedBalances,
-        parsedIntent: parsed.intent,
-        parsedFocus: parsed.focus || null,
-      };
-    } else {
-      const parsedData = {
-        ...parsed.transaction,
-        createdAt: new Date().toISOString(),
-        source: 'ai',
-      };
-
-      if (db) {
-        const userRef = db.collection('users').doc(uid);
-        updatedBalances = applyTransactionToBalances(updatedBalances, parsedData);
-
-        await userRef.set(
-          {
-            balances: updatedBalances,
-            profile: {
-              uid,
-              updatedAt: new Date(),
-            },
-          },
-          { merge: true }
-        );
-
-        await userRef.collection('transactions').add({
-          ...parsedData,
-          createdAt: new Date(),
-        });
-      } else {
-        updatedBalances = applyTransactionToBalances(updatedBalances, parsedData);
-      }
-
-      aiMessage = await generateResponse(parsedData, updatedBalances);
-      responseObj = {
-        parsedTransaction: parsedData,
-        parsedIntent: parsed.intent,
-        aiMessage,
-        updatedBalances
-      };
+    // 3. Generate textual context if no primary action
+    let aiMessage = plan.message;
+    if (plan.actions.length === 0) {
+       aiMessage = await generateContextReply({
+         message,
+         intent: plan.intent,
+         balances: updatedBalances,
+         transactions,
+         cloudEnabled: Boolean(db),
+       });
     }
 
-    // Save AI Message
+    const responseObj = {
+      message: aiMessage,
+      actions: plan.actions,
+      confidence: plan.confidence,
+      requiresApproval: plan.requiresApproval,
+      intent: plan.intent
+    };
+
+    // 4. Log AI Response
     if (db) {
-      await db.collection('users').doc(uid).collection('chats').add({
-        text: aiMessage,
-        sender: 'ai',
-        createdAt: new Date()
-      });
+       await userRef.collection('chats').add({
+         text: aiMessage,
+         sender: 'ai',
+         actions: plan.actions,
+         requiresApproval: plan.requiresApproval,
+         createdAt: new Date()
+       });
     }
 
     res.json(responseObj);
-
   } catch (error) {
-    console.error('Core Process Error:', error);
+    console.error('[AI-Process] Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get('/insights', verifyToken, async (req, res) => {
+router.post('/log-event', verifyToken, async (req, res) => {
+  try {
+    const { eventType, oldData, newData } = req.body;
+    const uid = req.user.uid;
+    const userRef = db.collection('users').doc(uid);
+
+    const eventMsg = `[System Event: ${eventType}] User manually modified data.`;
+    
+    if (db) {
+      await userRef.collection('chats').add({
+        text: eventMsg,
+        sender: 'system',
+        eventType,
+        oldData,
+        newData,
+        createdAt: new Date()
+      });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/report', verifyToken, async (req, res) => {
   try {
     const uid = req.user.uid;
-    if (!db) {
-      return res.json({ insight: 'Running in local mode. Connect Firebase to get synced AI insights.' });
-    }
-
+    if (!db) return res.status(400).json({ error: 'Cloud data required for reports.' });
     const userRef = db.collection('users').doc(uid);
-    const userDoc = await userRef.get();
+    const txSnapshot = await userRef.collection('transactions').orderBy('createdAt', 'desc').limit(50).get();
+    if (txSnapshot.empty) return res.json({ personalityType: "New User", insights: "Start logging transactions." });
+    const txs = [];
+    txSnapshot.forEach(doc => txs.push(doc.data()));
+    const report = await generatePersonalityReport(txs);
+    await userRef.collection('reports').add({ ...report, month: new Date().toISOString().slice(0, 7), createdAt: new Date() });
+    res.json(report);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
-    if (!userDoc.exists) {
-      return res.json({ insight: 'Not enough data yet.' });
-    }
+router.get('/suggest-budgets', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const userRef = db.collection('users').doc(uid);
+    const txSnapshot = await userRef.collection('transactions').limit(100).get();
+    const txs = [];
+    txSnapshot.forEach(doc => txs.push(doc.data()));
+    const suggestions = await suggestBudgets(txs);
+    res.json(suggestions);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
-    const data = userDoc.data();
-    const transactionsSnapshot = await userRef.collection('transactions').orderBy('createdAt', 'desc').limit(10).get();
-    const transactions = [];
-    transactionsSnapshot.forEach((doc) => transactions.push({ id: doc.id, ...doc.data() }));
-
-    const insight = await generateInsights(data.balances, transactions);
-    res.json({ insight });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
-  }
+router.post('/update-budgets', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { budgets } = req.body;
+    if (!db) return res.json({ success: true });
+    const userRef = db.collection('users').doc(uid);
+    await userRef.set({ budgetGoals: budgets }, { merge: true });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;

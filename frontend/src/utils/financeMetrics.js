@@ -54,4 +54,8 @@ export const buildTrendData = (transactions = []) => {
 };
 
 export const getTopCategory = (categories = {}) =>
-  Object.entries(categories).sort(([, a], [, b]) => Number(b) - Number(a))[0] || ['Personal', 0];
+  Object.entries(categories).sort(([, a], [, b]) => {
+    const valA = typeof a === 'object' ? a.spent : Number(a);
+    const valB = typeof b === 'object' ? b.spent : Number(b);
+    return valB - valA;
+  })[0] || ['Personal', 0];

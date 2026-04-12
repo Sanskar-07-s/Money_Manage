@@ -46,7 +46,7 @@ const StatCard = ({
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
         >
-          ₹{value.toLocaleString()}
+          {typeof value === 'number' ? `₹${value.toLocaleString()}` : value}
         </motion.h3>
       </div>
 

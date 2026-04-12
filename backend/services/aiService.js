@@ -165,8 +165,15 @@ const inferAccountFromMessage = (message) => {
   return 'Cash';
 };
 
-const inferCategoryFromMessage = (message, type) => {
+const inferCategoryFromMessage = (message, type, customCategories = []) => {
   const normalized = message.toLowerCase();
+  
+  // Match custom categories first
+  if (customCategories.length > 0) {
+    const matchedCustom = customCategories.find(c => normalized.includes(c.name.toLowerCase()));
+    if (matchedCustom) return matchedCustom.name;
+  }
+
   const explicitCategory =
     Object.entries(categoryAliases).find(([alias]) => normalized.includes(alias))?.[1] || null;
 
@@ -232,7 +239,7 @@ const inferFocus = (message = '') => {
   return null;
 };
 
-const normalizeTransaction = (transaction, message) => {
+const normalizeTransaction = (transaction, message, customCategories = []) => {
   const inferredType = inferTypeFromMessage(message);
   const inferredAmount = sumAmountsFromMessage(message);
   const amount = Number(transaction?.amount) || inferredAmount || 0;
@@ -241,29 +248,34 @@ const normalizeTransaction = (transaction, message) => {
     : inferredType;
   const finalType = inferredType !== type && inferredAmount > 0 ? inferredType : type;
 
+  const defaultCategory = inferCategoryFromMessage(message, finalType, customCategories);
+
   return {
     type: finalType,
     amount,
-    category: transaction?.category || inferCategoryFromMessage(message, finalType),
+    category: transaction?.category || defaultCategory,
     account: transaction?.account || inferAccountFromMessage(message),
-    note: transaction?.note || inferNoteFromMessage(message, transaction?.category || inferCategoryFromMessage(message, finalType)),
+    note: transaction?.note || inferNoteFromMessage(message, transaction?.category || defaultCategory),
   };
 };
 
-const heuristicTransactionParser = (message) => {
+const heuristicTransactionParser = (message, customCategories = []) => {
   const normalized = message.toLowerCase();
+  const type = inferTypeFromMessage(message);
+  const category = inferCategoryFromMessage(message, type, customCategories);
   const account =
     Object.entries(accountAliases).find(([alias]) => normalized.includes(alias))?.[1] || inferAccountFromMessage(message);
 
   return normalizeTransaction(
     {
-      type: inferTypeFromMessage(message),
+      type,
       amount: sumAmountsFromMessage(message),
-      category: inferCategoryFromMessage(message, inferTypeFromMessage(message)),
+      category,
       account,
       note: message.trim().slice(0, 120) || 'Manual entry',
     },
-    message
+    message,
+    customCategories
   );
 };
 
@@ -277,13 +289,13 @@ const looksLikeTransaction = (message = '') => {
   );
 };
 
-const heuristicIntentParser = (message = '') => {
+const heuristicIntentParser = (message = '', customCategories = []) => {
   const normalized = message.toLowerCase();
 
   if (looksLikeTransaction(normalized)) {
-    return { intent: 'transaction', transaction: heuristicTransactionParser(message) };
+    return { intent: 'transaction', transaction: heuristicTransactionParser(message, customCategories) };
   }
-
+// ... (rest of the code remains the same but within this context)
   if (/recent|history|last|latest transaction/.test(normalized)) {
     return { intent: 'recent_transactions' };
   }
@@ -307,18 +319,27 @@ const heuristicIntentParser = (message = '') => {
   return { intent: 'chat' };
 };
 
-const parseTransactionInput = async (message) => {
+const parseTransactionInput = async (message, customCategories = []) => {
   if (!message || !message.trim()) {
     throw new Error('Message is required.');
   }
 
-  if (!openai) {
-    const fallbackIntent = heuristicIntentParser(message);
-    if (fallbackIntent.intent === 'transaction') {
-      return fallbackIntent;
-    }
+  const categoryNames = customCategories.length > 0 
+    ? customCategories.map(c => c.name).join(', ')
+    : 'Food, Travel, College, Freelancing, Investment, Personal';
 
-    return fallbackIntent;
+  if (!openai) {
+    const fallbackIntent = heuristicIntentParser(message, customCategories);
+    return {
+      intent: "FINANCIAL_ACTION",
+      message: "Processing request via heuristic engine...",
+      actions: fallbackIntent.intent === 'transaction' ? [{
+        type: "ADD_TRANSACTION",
+        data: fallbackIntent.transaction
+      }] : [],
+      confidence: 60,
+      requiresApproval: fallbackIntent.intent === 'transaction'
+    };
   }
 
   try {
@@ -329,7 +350,26 @@ const parseTransactionInput = async (message) => {
         {
           role: 'system',
           content:
-            'Classify the user request for a finance web app. Return JSON only. Allowed intents are: transaction, summary, recent_transactions, insights, balances, help, chat. If intent is transaction, also include type, amount, category, account, note. If intent is balances and the user asks about a specific category or account, include focusType ("category" or "account") and focusValue. Valid categories: Food, Travel, College, Freelancing, Investment, Personal. Valid accounts: UPI, Bank, Cash.',
+            `You are a Financial Planning Assistant. Analyze user requests and plan actions. 
+            Return JSON only in this format: 
+            {
+              "intent": "FINANCIAL_ACTION",
+              "message": "Assistant message to user explaining the plan.",
+              "actions": [
+                {
+                  "type": "ADD_TRANSACTION",
+                  "data": { "amount": 50, "type": "expense", "category": "Food", "account": "UPI", "note": "bhel" } 
+                }
+              ],
+              "confidence": number (0-100),
+              "requiresApproval": boolean
+            }
+            Available categories: ${categoryNames}. Accounts: UPI, Bank, Cash.
+            COMMAND MODE:
+            - "salary 50000" -> ADD_TRANSACTION, amount 50000, type Income, category Salary, note Salary.
+            - "spent 200 on food" -> ADD_TRANSACTION, amount 200, type Expense, category Food.
+            - "add 100 on travel from upi" -> ADD_TRANSACTION, category Travel, account UPI.
+            ALWAYS provide an action for such commands. For >98% confidence on simple commands, set requiresApproval: false.`
         },
         {
           role: 'user',
@@ -342,37 +382,22 @@ const parseTransactionInput = async (message) => {
     const rawContent = response.choices?.[0]?.message?.content || '';
     const parsed = JSON.parse(cleanJsonString(rawContent));
 
-    if (parsed.intent === 'transaction') {
-      return {
-        intent: 'transaction',
-        transaction: normalizeTransaction({
-          type: parsed.type === 'income' ? 'income' : 'expense',
-          amount: Number(parsed.amount) || 0,
-          category: parsed.category || '',
-          account: parsed.account || '',
-          note: parsed.note || '',
-        }, message),
-      };
-    }
-
-    const intent = supportedIntents.includes(parsed.intent) ? parsed.intent : 'chat';
-    const focus = intent === 'balances'
-      ? {
-          type: parsed.focusType === 'category' || parsed.focusType === 'account' || parsed.focusType === 'total'
-            ? parsed.focusType
-            : inferFocus(message)?.type,
-          value: parsed.focusValue || inferFocus(message)?.value,
-        }
-      : undefined;
-
     return {
-      intent,
-      ...(focus?.type ? { focus } : {}),
+      intent: parsed.intent || "FINANCIAL_ACTION",
+      message: parsed.message || "I've prepared a financial plan for you.",
+      actions: parsed.actions || [],
+      confidence: parsed.confidence || 70,
+      requiresApproval: parsed.requiresApproval !== undefined ? parsed.requiresApproval : true
     };
   } catch (error) {
     console.error('OpenAI Parsing Error:', error);
-
-    return heuristicIntentParser(message);
+    return {
+      intent: "CHAT",
+      message: "I encountered an error planning your request. How else can I help?",
+      actions: [],
+      confidence: 0,
+      requiresApproval: false
+    };
   }
 };
 
@@ -486,7 +511,7 @@ const generateContextReply = async ({ message, intent, balances, transactions, c
         {
           role: 'system',
           content:
-            'You are an advanced finance assistant embedded in a website. You are allowed to read the user balance summary, recent transaction history, and synced cloud status that the backend provides. Be concise, helpful, and action-oriented. If cloudEnabled is false, say cloud sync is unavailable.',
+            'You are the MoneyManage AI Financial Manager. You help users manage wealth, detect patterns, and optimize spending. Be professional, data-driven, and proactive. You propose actions that users can approve. Always reference the current balances and history provided.'
         },
         {
           role: 'user',
@@ -510,9 +535,101 @@ const generateContextReply = async ({ message, intent, balances, transactions, c
   }
 };
 
+const suggestCategory = async (note, customCategories = []) => {
+  if (!note || !note.trim()) return { category: 'Personal', confidence: 0.1 };
+
+  const categoryNames = customCategories.length > 0 
+    ? customCategories.map(c => c.name).join(', ')
+    : 'Food, Travel, College, Freelancing, Investment, Personal';
+
+  if (!openai) {
+    // Heuristic suggestion
+    const type = inferTypeFromMessage(note);
+    const category = inferCategoryFromMessage(note, type, customCategories);
+    return { category, confidence: 0.6 };
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: buildOpenAIModel(),
+      temperature: 0,
+      messages: [
+        {
+          role: 'system',
+          content: `Suggest the most likely category for this transaction note. Return JSON with "category" and "confidence" (0-1). Available categories: ${categoryNames}.`,
+        },
+        {
+          role: 'user',
+          content: note,
+        },
+      ],
+      response_format: isOpenRouter ? undefined : { type: 'json_object' },
+    });
+
+    const parsed = JSON.parse(cleanJsonString(response.choices?.[0]?.message?.content || '{}'));
+    return {
+      category: parsed.category || 'Personal',
+      confidence: (Number(parsed.confidence) || 0.5) * 100
+    };
+  } catch (error) {
+    return { category: 'Personal', confidence: 30 };
+  }
+};
+
+const generatePersonalityReport = async (transactions = []) => {
+  if (!openai || transactions.length < 5) {
+    return {
+      personalityType: "Balanced",
+      insights: "Not enough data for behavioral modeling.",
+      recommendations: ["Log more transactions to unlock AI personality analysis."]
+    };
+  }
+
+  try {
+    const summary = transactions.slice(0, 50).map(t => ({ amount: t.amount, type: t.type, cat: t.category, note: t.note }));
+    const response = await openai.chat.completions.create({
+      model: buildOpenAIModel(),
+      messages: [
+        {
+          role: 'system',
+          content: 'Analyze these transactions and personify the user (Saver, Balanced, Spender, Risky Spender). Return JSON with "personalityType", "insights" (1 paragraph), and "recommendations" (list of 3).'
+        },
+        { role: 'user', content: JSON.stringify(summary) }
+      ],
+      response_format: isOpenRouter ? undefined : { type: 'json_object' }
+    });
+    return JSON.parse(cleanJsonString(response.choices?.[0]?.message?.content || '{}'));
+  } catch (err) {
+    return { personalityType: "Stable", insights: "Analyzing history...", recommendations: [] };
+  }
+};
+
+const suggestBudgets = async (transactions = []) => {
+  if (!openai || transactions.length < 5) return [];
+  try {
+    const summary = transactions.slice(0, 100).map(t => ({ amount: t.amount, type: t.type, cat: t.category }));
+    const response = await openai.chat.completions.create({
+      model: buildOpenAIModel(),
+      messages: [
+        {
+          role: 'system',
+          content: 'Suggest monthly budget limits for each category based on history. Return JSON array of objects: { category, limit }.'
+        },
+        { role: 'user', content: JSON.stringify(summary) }
+      ]
+    });
+    return JSON.parse(cleanJsonString(response.choices?.[0]?.message?.content || '[]'));
+  } catch (err) {
+    return [];
+  }
+};
+
 module.exports = {
   parseTransactionInput,
   generateResponse,
   generateInsights,
   generateContextReply,
+  suggestCategory,
+  generatePersonalityReport,
+  suggestBudgets
 };

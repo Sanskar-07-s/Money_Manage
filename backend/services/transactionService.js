@@ -65,9 +65,41 @@ const applyTransactionToBalances = (balances, transaction = {}) => {
   return nextBalances;
 };
 
+const recalculateBalances = (transactions = [], customCategories = []) => {
+  const balances = cloneDefaultBalances();
+  
+  // Ensure custom categories exist in the balance sheet
+  customCategories.forEach(c => {
+    if (!balances.categories[c.name]) {
+      balances.categories[c.name] = 0;
+    }
+  });
+
+  transactions.forEach(tx => {
+    const amount = Number(tx.amount) || 0;
+    const isIncome = tx.type === 'income';
+    const category = tx.category || 'Personal';
+    const account = tx.account || 'Cash';
+
+    if (isIncome) {
+      balances.total += amount;
+      balances.categories[category] = (Number(balances.categories[category]) || 0) + amount;
+      balances.accounts[account] = (Number(balances.accounts[account]) || 0) + amount;
+    } else {
+      balances.total -= amount;
+      balances.categories[category] = (Number(balances.categories[category]) || 0) - amount;
+      balances.accounts[account] = (Number(balances.accounts[account]) || 0) - amount;
+    }
+  });
+
+  balances.lastUpdated = Date.now();
+  return balances;
+};
+
 module.exports = {
   DEFAULT_BALANCES,
   cloneDefaultBalances,
   normalizeBalances,
   applyTransactionToBalances,
+  recalculateBalances
 };

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { MessageSquare, LayoutDashboard, History, Settings, LogOut, HandCoins } from 'lucide-react';
+import { MessageSquare, LayoutDashboard, History, Settings, LogOut, HandCoins, Tag } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import { cn } from '../utils/cn';
@@ -41,8 +41,9 @@ const Layout = ({ children }) => {
   };
 
   const navLinks = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/chat', icon: MessageSquare, label: 'Assistant' },
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/categories', icon: Tag, label: 'Categories' },
     { to: '/history', icon: History, label: 'History' },
     { to: '/settings', icon: Settings, label: 'Settings' },
   ];

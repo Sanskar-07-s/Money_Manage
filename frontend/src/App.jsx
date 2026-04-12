@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Chat = lazy(() => import('./pages/Chat'));
 const Transactions = lazy(() => import('./pages/Transactions'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Categories = lazy(() => import('./pages/Categories'));
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -51,6 +52,7 @@ function App() {
           <Route path="/chat" element={<PrivateRoute><PageWrapper><Chat /></PageWrapper></PrivateRoute>} />
           <Route path="/" element={<PrivateRoute><Navigate to="/dashboard" replace /></PrivateRoute>} />
           <Route path="/history" element={<PrivateRoute><PageWrapper><Transactions /></PageWrapper></PrivateRoute>} />
+          <Route path="/categories" element={<PrivateRoute><PageWrapper><Categories /></PageWrapper></PrivateRoute>} />
           <Route path="/settings" element={<PrivateRoute><PageWrapper><Settings /></PageWrapper></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from "framer-motion";
 import Layout from '../components/Layout';
-import { fetchTransactions } from '../services/api';
-import { getLocalTransactions } from '../utils/storage';
-import { Search, Filter, ArrowUpRight, ArrowDownLeft, Calendar, Tag, Wallet, ChevronRight, Download, Database } from 'lucide-react';
+import { fetchTransactions, deleteTransactionAPI, logAIEvent } from '../services/api';
+import { getLocalTransactions, deleteLocalTransaction } from '../utils/storage';
+import { Search, Filter, ArrowUpRight, ArrowDownLeft, Calendar, Tag, Wallet, Edit, Trash2, Download, Database } from 'lucide-react';
 import GlassBox from '../components/GlassBox';
+import EditTransactionModal from '../components/EditTransactionModal';
 import { cn } from '../utils/cn';
 
 export default function TransactionsPage() {
@@ -12,6 +13,7 @@ export default function TransactionsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [editingTx, setEditingTx] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -47,6 +49,23 @@ export default function TransactionsPage() {
     const matchesType = filterType === 'all' || tx.type === filterType;
     return matchesSearch && matchesType;
   });
+
+  const handleDelete = async (tx) => {
+    if (!window.confirm(`Are you sure you want to delete this ${tx.type} of ₹${tx.amount}?`)) return;
+    
+    // 1. Delete Locally (Source of Truth Recalculated)
+    deleteLocalTransaction(tx.id);
+    
+    // 2. Delete from Cloud and Record AI Event
+    try {
+      await deleteTransactionAPI(tx.id);
+      await logAIEvent('transaction_deleted', tx, null);
+    } catch (e) {
+      console.warn("Cloud delete failed. Deleted locally only.");
+    }
+    
+    loadData(); // Re-sync view
+  };
 
   const handleDownload = () => {
     const jsonString = JSON.stringify(transactions, null, 2);
@@ -157,7 +176,7 @@ export default function TransactionsPage() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: idx * 0.02 }}
                             key={tx.id || idx} 
-                            className="hover:bg-brand/5 transition-colors group cursor-pointer"
+                            className="hover:bg-brand/5 transition-colors group"
                           >
                              <td className="px-6 py-5">
                                 <div className="flex items-center gap-3">
@@ -198,8 +217,23 @@ export default function TransactionsPage() {
                                    {tx.type === 'income' ? <ArrowDownLeft size={16} fill="white" className="p-1 bg-emerald-50 rounded-md"/> : <ArrowUpRight size={16} className="p-1 bg-slate-50 rounded-md opacity-40"/>}
                                 </div>
                              </td>
-                             <td className="px-6 py-5 text-right">
-                                <ChevronRight size={16} className="text-slate-200 group-hover:text-brand transition-all -translate-x-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 ml-auto" />
+                             <td className="px-6 py-5 text-right w-24">
+                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button 
+                                    onClick={() => setEditingTx(tx)}
+                                    className="p-2 text-slate-400 hover:text-brand hover:bg-white rounded-lg transition-all"
+                                    title="Edit Transaction"
+                                  >
+                                    <Edit size={16} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDelete(tx)}
+                                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-all"
+                                    title="Delete Transaction"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
                              </td>
                           </motion.tr>
                         ))
@@ -244,6 +278,13 @@ export default function TransactionsPage() {
               </p>
            </GlassBox>
         </motion.div>
+        
+        <EditTransactionModal
+          transaction={editingTx}
+          isOpen={!!editingTx}
+          onClose={() => setEditingTx(null)}
+          onSuccess={loadData}
+        />
       </div>
     </Layout>
   );

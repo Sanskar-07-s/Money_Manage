@@ -3,7 +3,7 @@ import { auth } from '../utils/firebase';
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? '' : 'http://localhost:5005');
+  (import.meta.env.PROD ? '/_/backend' : 'http://localhost:5005');
 
 const getHeaders = async () => {
     if (!auth?.currentUser) {
@@ -121,5 +121,81 @@ export const updateProfile = async (profileData) => {
 export const deleteUserAllData = async () => {
     const config = await getHeaders();
     const res = await axios.delete(`${API_URL}/api/user/delete-all`, config);
+    return res.data;
+};
+
+// --- CATEGORY MANAGEMENT ---
+export const fetchCategories = async () => {
+    try {
+        const config = await getHeaders();
+        const res = await axios.get(`${API_URL}/api/user/categories`, config);
+        return res.data;
+    } catch {
+        return [];
+    }
+};
+
+export const addCategory = async (categoryData) => {
+    const config = await getHeaders();
+    const res = await axios.post(`${API_URL}/api/user/categories/add`, categoryData, config);
+    return res.data;
+};
+
+export const updateCategory = async (categoryData) => {
+    const config = await getHeaders();
+    const res = await axios.put(`${API_URL}/api/user/categories/update`, categoryData, config);
+    return res.data;
+};
+
+export const deleteCategory = async (id) => {
+    const config = await getHeaders();
+    const res = await axios.delete(`${API_URL}/api/user/categories/delete/${id}`, config);
+    return res.data;
+};
+export const logManualTransaction = async (transaction) => {
+    const config = await getHeaders();
+    const res = await axios.post(`${API_URL}/api/ai/log-manual`, { transaction }, config);
+    return res.data;
+};
+
+export const fetchCategorySuggestion = async (note) => {
+    const config = await getHeaders();
+    const res = await axios.post(`${API_URL}/api/ai/suggest`, { note }, config);
+    return res.data;
+};
+
+export const updateTransaction = async (id, transaction) => {
+    const config = await getHeaders();
+    const res = await axios.put(`${API_URL}/api/transaction/update/${id}`, transaction, config);
+    return res.data;
+};
+
+export const deleteTransactionAPI = async (id) => {
+    const config = await getHeaders();
+    const res = await axios.delete(`${API_URL}/api/transaction/delete/${id}`, config);
+    return res.data;
+};
+
+export const logAIEvent = async (eventType, oldData, newData) => {
+    const config = await getHeaders();
+    const res = await axios.post(`${API_URL}/api/ai/log-event`, { eventType, oldData, newData }, config);
+    return res.data;
+};
+
+export const fetchFinancialReport = async () => {
+    const config = await getHeaders();
+    const res = await axios.get(`${API_URL}/api/ai/report`, config);
+    return res.data;
+};
+
+export const fetchBudgetSuggestions = async () => {
+    const config = await getHeaders();
+    const res = await axios.get(`${API_URL}/api/ai/suggest-budgets`, config);
+    return res.data;
+};
+
+export const updateBudgets = async (budgets) => {
+    const config = await getHeaders();
+    const res = await axios.post(`${API_URL}/api/ai/update-budgets`, { budgets }, config);
     return res.data;
 };

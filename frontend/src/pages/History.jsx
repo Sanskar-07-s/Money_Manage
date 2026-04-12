@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from "framer-motion";
 import Layout from '../components/Layout';
 import { fetchTransactions } from '../services/api';
-import { getLocalTransactions } from '../utils/storage';
+import { getLocalTransactions, getPrivacyMode } from '../utils/storage';
 import { Search, Filter, ArrowUpRight, ArrowDownLeft, Calendar, Tag, Wallet, ChevronRight, Download } from 'lucide-react';
 import GlassBox from '../components/GlassBox';
 import { cn } from '../utils/cn';
@@ -12,12 +12,16 @@ export default function History() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [privacyMode, setPrivacyMode] = useState(getPrivacyMode());
 
   useEffect(() => {
     loadData();
     
     // Refresh history when updates happen elsewhere
-    const handleUpdate = () => loadData();
+    const handleUpdate = () => {
+      loadData();
+      setPrivacyMode(getPrivacyMode());
+    };
     window.addEventListener('finance-update', handleUpdate);
     return () => window.removeEventListener('finance-update', handleUpdate);
   }, []);
@@ -47,6 +51,11 @@ export default function History() {
     const matchesType = filterType === 'all' || tx.type === filterType;
     return matchesSearch && matchesType;
   });
+
+  const fA = (val) => {
+    if (privacyMode) return '••••';
+    return `₹${Number(val).toLocaleString()}`;
+  };
 
   const handleDownload = () => {
     try {
@@ -174,13 +183,15 @@ export default function History() {
                               </div>
                            </td>
                            <td className="px-6 py-5 text-right">
-                              <div className={cn(
-                                "text-sm font-black tracking-tighter flex items-center justify-end gap-1",
-                                tx.type === 'income' ? "text-emerald-500" : "text-slate-800"
-                              )}>
-                                 {tx.type === 'income' ? <ArrowDownLeft size={14} /> : <ArrowUpRight size={14} />}
-                                 ₹{Number(tx.amount).toLocaleString()}
-                              </div>
+                              <div className="text-right">
+                               <p className={cn(
+                                 "text-lg font-black tracking-tighter",
+                                 tx.type === 'income' ? "text-emerald-500" : "text-slate-800"
+                               )}>
+                                 {tx.type === 'income' ? '+' : '-'}{fA(tx.amount)}
+                               </p>
+                               <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">{tx.account || 'Local'}</p>
+                            </div>
                            </td>
                            <td className="px-6 py-5 text-right">
                               <ChevronRight size={16} className="text-slate-200 group-hover:text-brand transition-colors ml-auto" />
