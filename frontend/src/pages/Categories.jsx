@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import GlassBox from '../components/GlassBox';
 import { cn } from '../utils/cn';
-import { getLocalCategories, getLocalBalances, getPrivacyMode } from '../utils/storage';
+import { getLocalCategories, getLocalBalances, getPrivacyMode, recalculateLocalBalances } from '../utils/storage';
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState([]);
@@ -70,6 +70,7 @@ export default function CategoriesPage() {
       setCategories(updated);
       setNewCatName('');
       localStorage.setItem('user_categories', JSON.stringify(updated));
+      recalculateLocalBalances(); // Trigger dashboard sync
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to add category');
     }
@@ -84,6 +85,7 @@ export default function CategoriesPage() {
       setCategories(updatedList);
       setEditingId(null);
       localStorage.setItem('user_categories', JSON.stringify(updatedList));
+      recalculateLocalBalances(); // Trigger dashboard sync
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to update category');
     }
@@ -96,6 +98,7 @@ export default function CategoriesPage() {
       const updated = categories.filter(c => c.id !== id);
       setCategories(updated);
       localStorage.setItem('user_categories', JSON.stringify(updated));
+      recalculateLocalBalances(); // Trigger dashboard sync
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Failed to delete category');
     }

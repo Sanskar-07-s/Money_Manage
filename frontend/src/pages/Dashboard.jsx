@@ -102,6 +102,7 @@ export default function Dashboard() {
     
     const handleUpdate = () => {
       setPrivacyMode(getPrivacyMode());
+      refreshData();
     };
     window.addEventListener('finance-update', handleUpdate);
     return () => window.removeEventListener('finance-update', handleUpdate);
