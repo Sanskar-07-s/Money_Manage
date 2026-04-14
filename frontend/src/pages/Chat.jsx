@@ -199,15 +199,9 @@ export default function Chat() {
 
       setMessages(prev => [...prev, aiMsg]);
 
-      // Execution Layer: Autonomous Mode (Confidence > 98% and matching conditions)
-      if (!response.requiresApproval && response.actions.length > 0 && response.confidence > 98) {
-         const existing = getLocalCategories();
-         const firstAction = response.actions[0];
-         const catExists = existing.some(c => c.name.toLowerCase() === firstAction.data.category.toLowerCase());
-         
-         if (catExists) {
-           response.actions.forEach(action => executeAction(action, aiMsgId));
-         }
+      // Execution Layer: Autonomous Sync Mode
+      if (response.actions && response.actions.length > 0) {
+          response.actions.forEach(action => executeAction(action, aiMsgId));
       }
 
     } catch (err) {
@@ -391,58 +385,6 @@ export default function Chat() {
                                     </ReactMarkdown>
                                   </div>
 
-                                  {/* AI Action Proposal Layer */}
-                                  {msg.sender === 'ai' && msg.actions && msg.actions.length > 0 && !msg.executed && (
-                                     <motion.div 
-                                       initial={{ opacity: 0, scale: 0.9 }}
-                                       animate={{ opacity: 1, scale: 1 }}
-                                       className="mt-4 p-4 rounded-2xl bg-brand/5 border border-brand/20 space-y-4"
-                                     >
-                                        <div className="flex items-center justify-between">
-                                           <div className="flex items-center gap-2">
-                                              <Sparkles size={14} className="text-brand" />
-                                              <span className="text-[10px] font-black uppercase tracking-widest text-brand">Proposed Action</span>
-                                           </div>
-                                           <span className="text-[9px] font-bold text-slate-400">Confidence: {Math.round(msg.confidence)}%</span>
-                                        </div>
-
-                                        {msg.actions.map((action, aiIdx) => (
-                                           <div key={aiIdx} className="bg-white p-3 rounded-xl border border-brand/10 shadow-sm">
-                                              {action.type === 'ADD_TRANSACTION' && (
-                                                 <div className="flex justify-between items-center">
-                                                    <div>
-                                                       <p className="text-xs font-bold text-slate-800">₹{action.data.amount} {action.data.category}</p>
-                                                       <p className="text-[9px] font-medium text-slate-500 uppercase">{action.data.type} • via {action.data.account}</p>
-                                                    </div>
-                                                    <div className="text-[9px] font-black text-brand bg-brand/5 px-2 py-1 rounded-lg">PROPOSED</div>
-                                                 </div>
-                                              )}
-                                           </div>
-                                        ))}
-
-                                        <div className="flex gap-2">
-                                           <button 
-                                              onClick={() => {
-                                                if (msg.executed) return;
-                                                // 1. Immediately update UI to local "Executed" state to prevent double-click
-                                                setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, executed: true } : m));
-                                                // 2. Process actions
-                                                msg.actions.forEach(act => executeAction(act, msg.id));
-                                              }}
-                                              className="flex-1 py-2 bg-brand text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all shadow-md shadow-brand/10 disabled:opacity-50"
-                                              disabled={msg.executed}
-                                           >
-                                              {msg.executed ? 'Executed' : 'Approve & Execute'}
-                                           </button>
-                                           <button 
-                                              onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actions: [], rejected: true } : m))}
-                                              className="px-4 py-2 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 transition-colors"
-                                           >
-                                              Reject
-                                           </button>
-                                        </div>
-                                     </motion.div>
-                                  )}
 
                                   {msg.executed && (
                                      <div className="mt-3 flex items-center gap-2 text-emerald-500 text-[9px] font-black uppercase tracking-widest px-1">
