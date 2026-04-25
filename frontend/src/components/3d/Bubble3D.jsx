@@ -43,13 +43,11 @@ export function Bubble3D({ message, isAi, index, total, isTyping }) {
         <boxGeometry args={[4, 1.8, 0.2]} />
         <meshPhysicalMaterial 
           color={isAi ? "#ffffff" : "#0ea5e9"}
-          roughness={0.2}
+          roughness={0.1}
           metalness={0.1}
-          transmission={isAi ? 0.8 : 0} // AI is glass, user is solid
-          thickness={0.5}
-          clearcoat={1}
+          transmission={isAi ? 0.4 : 0} // Reduced transmission for performance
           transparent={true}
-          opacity={0.9}
+          opacity={isAi ? 0.7 : 0.9}
         />
         
         {/* Render HTML Text onto the 3D surface */}

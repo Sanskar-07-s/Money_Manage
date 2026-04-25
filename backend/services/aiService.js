@@ -338,7 +338,7 @@ const parseTransactionInput = async (message, customCategories = []) => {
         data: fallbackIntent.transaction
       }] : [],
       confidence: 60,
-      requiresApproval: fallbackIntent.intent === 'transaction'
+      requiresApproval: true
     };
   }
 
@@ -357,19 +357,44 @@ const parseTransactionInput = async (message, customCategories = []) => {
               "message": "Assistant message to user explaining the plan.",
               "actions": [
                 {
-                  "type": "ADD_TRANSACTION",
-                  "data": { "amount": 50, "type": "expense", "category": "Food", "account": "UPI", "note": "bhel" } 
+                  "action": "ADD_TRANSACTION",
+                  "type": "expense",
+                  "data": { "amount": 50, "category": "Food", "account": "UPI", "note": "bhel" },
+                  "confidence": 0.95
                 }
               ],
-              "confidence": number (0-100),
-              "requiresApproval": boolean
+              "confidence": 0.95,
+              "requiresApproval": true
             }
+            Supported Actions:
+            - ADD_TRANSACTION: { "amount": number, "type": "income"|"expense", "category": string, "account": "UPI"|"Bank"|"Cash", "note": string }
+            - EDIT_TRANSACTION: { "id": string, "updates": { "amount"?: number, "category"?: string, ... } }
+            - DELETE_TRANSACTION: { "id": string }
+
             Available categories: ${categoryNames}. Accounts: UPI, Bank, Cash.
-            COMMAND MODE:
-            - "salary 50000" -> ADD_TRANSACTION, amount 50000, type Income, category Salary, note Salary.
-            - "spent 200 on food" -> ADD_TRANSACTION, amount 200, type Expense, category Food.
-            - "add 100 on travel from upi" -> ADD_TRANSACTION, category Travel, account UPI.
-            ALWAYS provide an action for such commands. For >98% confidence on simple commands, set requiresApproval: false.`
+            
+            Multi-action Support:
+            If the user gives multiple commands (e.g., "Add salary 50000 and spend 2000 on food"), split them into multiple objects in the "actions" array.
+            
+            Rules:
+            1. ALWAYS set "requiresApproval" to true for any transaction modification.
+            2. For ADD_TRANSACTION, if category is unknown, suggest the best match from available categories or suggest a new one in the "message".
+            3. "confidence" should be between 0.0 and 1.0.
+            4. If the user mentions "salary", "income", "received", "credited", it's an "income" type.
+            5. If the user mentions "spent", "paid", "bought", "bill", it's an "expense" type.
+            
+            Example:
+            User: "Add salary 50000 and spend 2000 food"
+            Response: {
+              "intent": "FINANCIAL_ACTION",
+              "message": "I've prepared two actions: recording your salary and your food expense.",
+              "actions": [
+                { "action": "ADD_TRANSACTION", "type": "income", "data": { "amount": 50000, "category": "Freelancing", "note": "Salary", "account": "Bank" } },
+                { "action": "ADD_TRANSACTION", "type": "expense", "data": { "amount": 2000, "category": "Food", "note": "Food", "account": "Cash" } }
+              ],
+              "confidence": 0.98,
+              "requiresApproval": true
+            }`
         },
         {
           role: 'user',
@@ -386,8 +411,8 @@ const parseTransactionInput = async (message, customCategories = []) => {
       intent: parsed.intent || "FINANCIAL_ACTION",
       message: parsed.message || "I've prepared a financial plan for you.",
       actions: parsed.actions || [],
-      confidence: parsed.confidence || 70,
-      requiresApproval: parsed.requiresApproval !== undefined ? parsed.requiresApproval : true
+      confidence: parsed.confidence || 0.7,
+      requiresApproval: true // Strictly enforce approval layer
     };
   } catch (error) {
     console.error('OpenAI Parsing Error:', error);

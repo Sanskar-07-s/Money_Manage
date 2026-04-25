@@ -169,4 +169,25 @@ router.post('/update-budgets', verifyToken, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.get('/insights', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    if (!db) return res.json({ insight: "Cloud sync disabled. No insights available." });
+    
+    const userRef = db.collection('users').doc(uid);
+    const userDoc = await userRef.get();
+    const balances = userDoc.exists ? userDoc.data().balances : cloneDefaultBalances();
+    
+    const txSnapshot = await userRef.collection('transactions').orderBy('createdAt', 'desc').limit(20).get();
+    const txs = [];
+    txSnapshot.forEach(doc => txs.push(doc.data()));
+    
+    const insight = await generateInsights(balances, txs);
+    res.json({ insight });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 module.exports = router;

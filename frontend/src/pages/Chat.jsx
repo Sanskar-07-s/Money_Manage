@@ -33,6 +33,8 @@ import { cn } from '../utils/cn';
 import ReactMarkdown from 'react-markdown';
 import ManualAddModal from '../components/ManualAddModal';
 import { Plus } from 'lucide-react';
+import ProposalCard from '../components/ProposalCard';
+import { updateTransaction, deleteTransactionAPI } from '../services/api';
 
 export default function Chat() {
   const [messages, setMessages] = useState([
@@ -125,10 +127,13 @@ export default function Chat() {
     const targetMsg = messages.find(m => m.id === messageId);
     if (targetMsg?.executed && !skipValidation) return;
 
-    // 2. Category Validation Layer
-    if (!skipValidation) {
+    const actionData = action.data;
+    const actionType = action.action || action.type; // support both formats
+
+    // 2. Category Validation Layer (only for ADD and EDIT if category changed)
+    if (!skipValidation && (actionType === 'ADD_TRANSACTION' || (actionType === 'EDIT_TRANSACTION' && actionData.category))) {
       const existingCategories = getLocalCategories();
-      const exists = existingCategories.some(c => c.name.toLowerCase() === action.data.category.toLowerCase());
+      const exists = existingCategories.some(c => c.name.toLowerCase() === actionData.category.toLowerCase());
       
       if (!exists) {
         setPendingConflict({ action, messageId });
@@ -138,10 +143,12 @@ export default function Chat() {
 
     try {
       const mode = getStorageMode();
-      if (action.type === 'ADD_TRANSACTION') {
+      let result;
+
+      if (actionType === 'ADD_TRANSACTION') {
         const txData = { 
-            ...action.data, 
-            amount: Number(action.data.amount),
+            ...actionData, 
+            amount: Number(actionData.amount),
             source: 'ai', 
             createdAt: new Date().toISOString() 
         };
@@ -149,27 +156,39 @@ export default function Chat() {
         if (mode === 'local' || mode === 'hybrid') {
           addLocalTransaction(txData);
         }
-        await addTransaction(txData);
-        
-        const balances = getLocalBalances();
-        const symbol = action.data.type?.toLowerCase() === 'income' ? '+' : '-';
-
-        setMessages(prev => [
-          ...prev.map(m => m.id === messageId ? { ...m, actions: [], executed: true } : m),
-          {
-            id: Date.now() + 5,
-            sender: 'ai',
-            text: `### ✅ Transaction Synchronized\n**Current Balance:** ₹${balances.total.toLocaleString()}\n**Impact:** ${symbol}₹${Number(action.data.amount).toLocaleString()}\n\nLedger entry: *${action.data.note}* in **${action.data.category}** using **${action.data.account}**`,
-            executed: true
-          }
-        ]);
-
-        setVoiceBanner('Sync successful ✅');
-        if (!skipValidation) setTimeout(() => setVoiceBanner(''), 3000);
+        result = await addTransaction(txData);
+      } else if (actionType === 'EDIT_TRANSACTION') {
+        result = await updateTransaction(actionData.id, actionData.updates || actionData);
+      } else if (actionType === 'DELETE_TRANSACTION') {
+        result = await deleteTransactionAPI(actionData.id);
       }
+
+      const balances = getLocalBalances();
+      const symbol = actionData.type?.toLowerCase() === 'income' ? '+' : '-';
+
+      setMessages(prev => [
+        ...prev.map(m => m.id === messageId ? { 
+          ...m, 
+          actions: m.actions.map(a => a === action ? { ...a, executed: true } : a),
+          executed: m.actions.every(a => a === action || a.executed)
+        } : m),
+        {
+          id: Date.now() + 5,
+          sender: 'ai',
+          text: `### ✅ Action Executed\n**Type:** ${actionType}\n**Result:** Success\n\n${actionType === 'ADD_TRANSACTION' ? `**Impact:** ${symbol}₹${Number(actionData.amount).toLocaleString()}\nLedger entry: *${actionData.note}* in **${actionData.category}**` : 'Database synchronized.'}`,
+          executed: true
+        }
+      ]);
+
+      setVoiceBanner('Sync successful ✅');
+      if (!skipValidation) setTimeout(() => setVoiceBanner(''), 3000);
+      
+      // Emit update to refresh other components
+      emitFinanceUpdate();
+      
     } catch (err) {
       console.error("Action execution failed", err);
-      setError("Execution failed. Retrying sync node...");
+      setError("Execution failed. AI safety lock engaged.");
     }
   };
 
@@ -199,8 +218,8 @@ export default function Chat() {
 
       setMessages(prev => [...prev, aiMsg]);
 
-      // Execution Layer: Autonomous Sync Mode
-      if (response.actions && response.actions.length > 0) {
+      // Execution Layer: Only execute if NO approval is required
+      if (response.actions && response.actions.length > 0 && !response.requiresApproval) {
           response.actions.forEach(action => executeAction(action, aiMsgId));
       }
 
@@ -265,13 +284,17 @@ export default function Chat() {
         />
 
         {/* Global Control Bar */}
-        <div className="bg-white/60 backdrop-blur-xl p-4 z-40 sticky top-0 flex justify-between items-center shadow-lg mx-4 mt-4 rounded-3xl border border-white/50">
-          <div className="flex items-center gap-4 pointer-events-auto">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand to-indigo-600 flex items-center justify-center text-white shadow-brand/20 relative">
-               <Sparkles size={18} className="animate-pulse"/>
-            </div>
+        <div className="bg-white/40 backdrop-blur-xl p-5 z-40 sticky top-0 flex justify-between items-center shadow-[0_8px_32px_rgba(0,0,0,0.05)] mx-6 mt-6 rounded-[2.5rem] border border-white/60">
+          <div className="flex items-center gap-5 pointer-events-auto">
+            <motion.div 
+              whileHover={{ scale: 1.05, rotate: 5 }}
+              className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-brand/20 relative overflow-hidden"
+            >
+               <Sparkles size={22} className="animate-pulse relative z-10"/>
+               <div className="absolute inset-0 bg-white/20 blur-xl"></div>
+            </motion.div>
             <div className="hidden sm:block">
-              <h2 className="text-lg font-display font-black text-slate-800 tracking-tight">AI Assistant</h2>
+              <h2 className="text-xl font-display font-black text-slate-800 tracking-tight leading-none mb-1">AI Assistant</h2>
               <div className="flex items-center gap-1.5">
                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Autonomous Sync Active</span>
@@ -279,29 +302,35 @@ export default function Chat() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto">
-            <button
+          <div className="flex items-center gap-2 sm:gap-4 pointer-events-auto">
+            <motion.button
+               whileHover={{ scale: 1.1 }}
+               whileTap={{ scale: 0.9 }}
                onClick={() => setShowClearConfirm(true)}
                title="Clear AI Chat"
-               className="p-2 rounded-xl text-red-500 bg-red-50 hover:bg-red-500 hover:text-white transition-all duration-300 shadow-sm"
+               className="p-3 rounded-2xl text-red-500 bg-red-50/50 hover:bg-red-500 hover:text-white transition-all duration-300 shadow-sm border border-red-100/50"
             >
-               <Trash2 size={18} />
-            </button>
-            <button
+               <Trash2 size={20} />
+            </motion.button>
+            <motion.button
+               whileHover={{ scale: 1.1 }}
+               whileTap={{ scale: 0.9 }}
                onClick={() => setShowHistory(!showHistory)}
-               className={cn("p-2 rounded-xl transition-all duration-300", showHistory ? "bg-brand text-white shadow-md shadow-brand/20" : "bg-white/80 text-slate-600 border border-slate-100")}
+               className={cn("p-3 rounded-2xl transition-all duration-300 border shadow-sm", showHistory ? "bg-brand text-white border-brand shadow-brand/20" : "bg-white/80 text-slate-600 border-slate-100")}
             >
-                <HistoryIcon size={18} />
-            </button>
-            <button
+                <HistoryIcon size={20} />
+            </motion.button>
+            <motion.button
+               whileHover={{ scale: 1.05 }}
+               whileTap={{ scale: 0.95 }}
                onClick={() => setIsManualModalOpen(true)}
                title="Manual Entry"
-               className="p-2 rounded-xl text-brand bg-brand/5 hover:bg-brand hover:text-white transition-all duration-300 shadow-sm flex items-center gap-1.5"
+               className="p-3 rounded-2xl text-brand bg-brand/5 hover:bg-brand hover:text-white transition-all duration-300 shadow-sm border border-brand/10 flex items-center gap-2"
             >
-               <Plus size={18} />
-               <span className="hidden lg:inline text-[9px] font-black uppercase tracking-widest">Manual</span>
-            </button>
-            <div className="h-6 w-px bg-slate-200 mx-1"></div>
+               <Plus size={20} />
+               <span className="hidden lg:inline text-[10px] font-black uppercase tracking-widest">Manual</span>
+            </motion.button>
+            <div className="h-8 w-px bg-slate-200/50 mx-1"></div>
             <button
               type="button"
               onClick={() => setVoiceMode(voiceMode === 'push-to-talk' ? 'always-listening' : 'push-to-talk')}
@@ -356,17 +385,17 @@ export default function Chat() {
                             msg.sender === 'user' ? "flex-row-reverse" : "flex-row"
                           )}>
                              {msg.sender === 'ai' && (
-                               <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand to-indigo-600 flex items-center justify-center text-white shadow-lg shrink-0 mt-1 relative border border-white/20">
+                               <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand to-indigo-600 flex items-center justify-center text-white shadow-lg shrink-0 mt-1 relative border border-white/20">
                                   <Sparkles size={14} />
                                </div>
                              )}
 
                              <div className="flex flex-col min-w-0">
                                <div className={cn(
-                                  "relative p-4 md:px-5 md:py-4 rounded-3xl text-sm leading-relaxed shadow-sm w-fit",
+                                  "relative p-5 md:px-7 md:py-5 rounded-[2rem] text-[15px] leading-relaxed shadow-xl w-fit",
                                   msg.sender === 'user' 
-                                    ? "bg-brand text-white rounded-tr-sm font-medium border border-brand/20 shadow-brand/10" 
-                                    : "bg-white text-slate-700 rounded-tl-sm border border-slate-100 shadow-slate-200/50"
+                                    ? "bg-gradient-to-br from-brand to-indigo-600 text-white rounded-tr-none font-medium border border-white/20 shadow-brand/20" 
+                                    : "bg-white/90 backdrop-blur-md text-slate-700 rounded-tl-none border border-white shadow-slate-200/50"
                                )}>
                                   <div className="space-y-3 break-words whitespace-pre-wrap min-w-0">
                                     <ReactMarkdown 
@@ -384,6 +413,26 @@ export default function Chat() {
                                       {msg.text}
                                     </ReactMarkdown>
                                   </div>
+
+                                  {/* AI Proposal Cards */}
+                                  {msg.sender === 'ai' && msg.actions && msg.actions.length > 0 && (
+                                    <div className="space-y-4 mt-4">
+                                      {msg.actions.map((action, actionIdx) => (
+                                        <ProposalCard 
+                                          key={actionIdx}
+                                          action={{ ...action, confidence: action.confidence || msg.confidence }}
+                                          isExecuted={action.executed}
+                                          onAccept={(updatedAction) => executeAction(updatedAction || action, msg.id)}
+                                          onCancel={() => {
+                                            setMessages(prev => prev.map(m => m.id === msg.id ? {
+                                              ...m,
+                                              actions: m.actions.filter((_, idx) => idx !== actionIdx)
+                                            } : m));
+                                          }}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
 
 
                                   {msg.executed && (
@@ -409,7 +458,7 @@ export default function Chat() {
                           animate={{ opacity: 1, x: 0 }}
                           className="flex items-center gap-3 pl-2"
                         >
-                           <div className="bg-white/80 backdrop-blur-md p-3 px-6 rounded-2xl flex gap-1.5 border border-white shadow-md">
+                           <div className="bg-white/80 backdrop-blur-md p-4 px-6 rounded-2xl flex gap-1.5 border border-white shadow-xl shadow-black/5">
                               <div className="w-1.5 h-1.5 bg-brand rounded-full animate-bounce"></div>
                               <div className="w-1.5 h-1.5 bg-brand rounded-full animate-bounce [animation-delay:0.2s]"></div>
                               <div className="w-1.5 h-1.5 bg-brand rounded-full animate-bounce [animation-delay:0.4s]"></div>
@@ -446,16 +495,18 @@ export default function Chat() {
           
           <div className="max-w-3xl mx-auto space-y-4">
              {!isTyping && (
-                <div className="flex gap-2 overflow-x-auto scroller-hidden justify-center px-2">
+                <div className="flex gap-3 overflow-x-auto scroller-hidden justify-center px-4">
                    {quickActions.map((action, idx) => (
-                      <button
+                      <motion.button
                         key={idx}
+                        whileHover={{ scale: 1.05, y: -2 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={() => { setInput(action.label); submitMessage(action.label); }}
-                        className="px-4 py-2 rounded-full bg-white/70 border border-white/50 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-brand hover:border-brand transition-all flex items-center gap-2 whitespace-nowrap shadow-sm"
+                        className="px-6 py-3 rounded-full bg-white/40 backdrop-blur-xl border border-white/60 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-brand hover:border-brand hover:bg-white transition-all flex items-center gap-3 whitespace-nowrap shadow-xl shadow-black/5"
                       >
-                         <action.icon size={11} />
+                         <action.icon size={14} className="text-brand/60" />
                          {action.label}
-                      </button>
+                      </motion.button>
                    ))}
                 </div>
              )}

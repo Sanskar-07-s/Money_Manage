@@ -95,14 +95,14 @@ export function ChatScene({ messages, isTyping, isListening = false, transcriptP
             {/* ScrollWrapper to manually tie scroll to R3F elements */}
             <ScrollControls pages={pages} damping={0.2} distance={2}>
                <Scroll>
-                 <group position={[0, (total * 2.5) / 2 - 2, 0]}> {/* Shift group up so latest are in view */}
-                    {messages.map((msg, idx) => (
+                 <group position={[0, (Math.min(total, 6) * 2.5) / 2 - 2, 0]}> {/* Shift group up so latest are in view */}
+                    {messages.slice(-6).map((msg, idx) => (
                       <Bubble3D 
                         key={msg.id} 
                         message={msg.text} 
                         isAi={msg.sender === 'ai'} 
-                        index={idx}
-                        total={total}
+                        index={messages.length > 6 ? idx : idx}
+                        total={Math.min(total, 6)}
                         isTyping={false}
                       />
                     ))}
@@ -111,8 +111,8 @@ export function ChatScene({ messages, isTyping, isListening = false, transcriptP
                         key="typing"
                         message=""
                         isAi={true}
-                        index={messages.length}
-                        total={total}
+                        index={Math.min(total, 6)}
+                        total={Math.min(total, 6)}
                         isTyping={true}
                       />
                     )}
